@@ -36,6 +36,35 @@ if (_DEVEL)
 
 endif (_DEVEL)
 
+if (OPENGL_FOUND AND GLUT_FOUND)
+
+    message(STATUS "libkshark-plot")
+    add_library(kshark-plot  SHARED  libkshark-plot.c
+                                     KsPlotTools.cpp)
+
+    target_link_libraries(kshark-plot  kshark
+                                       ${GLUT_LIBRARY}
+                                       ${OPENGL_LIBRARIES})
+
+    set_target_properties(kshark-plot PROPERTIES  SUFFIX ".so.${KS_VERSION_STRING}")
+
+    install(TARGETS kshark-plot LIBRARY DESTINATION ${_INSTALL_PREFIX}/lib/${KS_APP_NAME}
+                                COMPONENT core)
+
+    if (_DEVEL)
+
+        install_symlink("libkshark-plot.so.${KS_VERSION_STRING}"
+                        "${_INSTALL_PREFIX}/lib/${KS_APP_NAME}/libkshark-plot.so")
+
+        install(FILES "${KS_DIR}/src/KsPlotTools.hpp"
+                      "${KS_DIR}/src/libkshark-plot.h"
+                DESTINATION ${KS_INCLUDS_DESTINATION}
+                COMPONENT devel)
+
+    endif (_DEVEL)
+
+endif (OPENGL_FOUND AND GLUT_FOUND)
+
 find_program(DO_AS_ROOT pkexec)
 
 configure_file( ${KS_DIR}/build/deff.h.cmake
