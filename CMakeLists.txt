@@ -84,6 +84,8 @@ message(STATUS "C flags      : " ${CMAKE_C_FLAGS})
 message(STATUS "CXX flags    : " ${CMAKE_CXX_FLAGS})
 message(STATUS "Linker flags : " ${CMAKE_EXE_LINKER_FLAGS})
 
+add_subdirectory(${KS_DIR}/src)
+
 if (_DOXYGEN_DOC AND DOXYGEN_FOUND)
 
     message("\n doxygen documentation ...")
