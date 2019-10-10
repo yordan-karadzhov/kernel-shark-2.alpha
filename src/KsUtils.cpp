@@ -926,7 +926,7 @@ void KsPluginManager::unregisterFromList(kshark_context *kshark_ctx)
 char *KsPluginManager::_pluginLibFromName(const QString &plugin, int &n)
 {
 	QString appPath = QCoreApplication::applicationDirPath();
-	QString libPath = appPath + "/../../kernel-shark-2.0/lib";
+	QString libPath = appPath + "/../lib";
 	std::string pluginStr = plugin.toStdString();
 	char *lib;
 
