@@ -98,8 +98,16 @@ static void ksmodel_set_in_range_bining(struct kshark_trace_histo *histo,
 	uint64_t corrected_range, delta_range, range = max - min;
 	struct kshark_entry *last;
 
+	if (n == 0) {
+		histo->min = min;
+		histo->max = max;
+		histo->bin_size = 0;
+
+		return;
+	}
+
 	/* The size of the bin must be >= 1, hence the range must be >= n. */
-	if (n == 0 || range < n) {
+	if (range < n) {
 		range = n;
 		max = min + n;
 	}
