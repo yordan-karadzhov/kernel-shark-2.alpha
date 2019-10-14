@@ -147,17 +147,17 @@ public:
 			count += s._taskList.count() +
 				 s._cpuList.count();
 
-		return count;
+		return count + comboGraphCount();
 	}
 
 	/** Get the number of VirtCombo plots. */
-	int totComboGraphCount() const {return _comboPlots.count();}
+	int comboGraphCount() const {return _comboPlots.count();}
 
 	/** Get the height of the widget. */
 	int height() const
 	{
 		return totGraphCount() * (KS_GRAPH_HEIGHT + _vSpacing) +
-		       totComboGraphCount() * (KS_GRAPH_HEIGHT * 2 + _vSpacing) +
+		       comboGraphCount() * (KS_GRAPH_HEIGHT * 2 + _vSpacing) +
 		       _vMargin * 2;
 	}
 
