@@ -49,7 +49,7 @@ KsMainWindow::KsMainWindow(QWidget *parent)
   _appendAction("Append Trace File", this),
   _restoreSessionAction("Restore Last Session", this),
   _importSessionAction("Import Session", this),
-  _exportSessionAction("Export Sassion", this),
+  _exportSessionAction("Export Session", this),
   _quitAction("Quit", this),
   _importFilterAction("Import Filter", this),
   _exportFilterAction("Export Filter", this),
