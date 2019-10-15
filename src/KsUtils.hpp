@@ -144,6 +144,15 @@ inline QString cpuPlotName(int cpu) {return QString("CPU %1").arg(cpu);}
 
 QString taskPlotName(int sd, int pid);
 
+inline int getNStreams()
+{
+	kshark_context *kshark_ctx(nullptr);
+
+	if (!kshark_instance(&kshark_ctx))
+		return -1;
+	return kshark_ctx->n_streams;
+}
+
 }; // KsUtils
 
 /** Identifier of the Dual Marker active state. */

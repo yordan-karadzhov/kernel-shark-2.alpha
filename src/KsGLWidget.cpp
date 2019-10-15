@@ -580,6 +580,7 @@ void KsGLWidget::_makeGraphs()
 	_labelSize = _getMaxLabelSize() + FONT_WIDTH * 2;
 
 	auto lamAddGraph = [&](int sd, KsPlot::Graph *graph) {
+		KsPlot::Color color = {255, 255, 255}; // White
 		/*
 		 * Calculate the base level of the CPU graph inside the widget.
 		 * Remember that the "Y" coordinate is inverted.
@@ -588,8 +589,16 @@ void KsGLWidget::_makeGraphs()
 			return;
 
 		graph->setBase(base);
+
+		/*
+		 * If we have multiple Data streams use the color of the stream
+		 * for the label of the graph.
+		 */
+		if (KsUtils::getNStreams() > 1)
+			color = KsPlot::getColor(&_streamColors, sd);
+
 		graph->setLabelAppearance(&_font,
-					  KsPlot::getColor(&_streamColors, sd),
+					  color,
 					  _labelSize,
 					  _hMargin);
 
