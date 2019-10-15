@@ -73,7 +73,6 @@ KsCaptureControl::KsCaptureControl(QWidget *parent)
 	int sd = kshark_add_stream(kshark_ctx);
 	_stream = kshark_ctx->stream[sd];
 
-	kshark_tep_init_interface(_stream);
 	kshark_tep_init_local(_stream);
 
 	_eventsWidget = new KsWidgetsLib::KsEventsCheckBoxWidget(_stream, this);

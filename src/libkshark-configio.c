@@ -1056,7 +1056,7 @@ static bool kshark_adv_filters_to_json(struct kshark_data_stream *stream,
 	if (!jfilter_data)
 		goto fail;
 
-	events = kshark_tep_get_event_ids(stream);
+	events = kshark_get_all_event_ids(stream);
 	if (!events)
 		return false;
 

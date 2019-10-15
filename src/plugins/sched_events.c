@@ -234,7 +234,9 @@ static int find_wakeup_pid(struct kshark_context *kshark_ctx,
 	if (!stream || !wakeup_event || e->event_id != wakeup_event->id)
 		return -1;
 
-	record = stream->interface.read_at(stream, e->offset);
+	record = tracecmd_read_at(kshark_get_tep_input(stream),
+				  e->offset, NULL);
+
 	ret = tep_read_number_field(pid_field, record->data, &val);
 	free_record(record);
 
@@ -327,7 +329,8 @@ bool plugin_switch_match_rec_pid(struct kshark_context *kshark_ctx,
 		struct kshark_data_stream *stream = kshark_ctx->stream[sd];
 		struct tep_record *record;
 
-		record = stream->interface.read_at(stream, e->offset);
+		record = tracecmd_read_at(kshark_get_tep_input(stream),
+					  e->offset, NULL);
 		ret = tep_read_number_field(plugin_ctx->sched_switch_prev_state_field,
 					    record->data, &val);
 

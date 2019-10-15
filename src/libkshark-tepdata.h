@@ -19,16 +19,12 @@
 extern "C" {
 #endif
 
-void kshark_tep_init_interface(struct kshark_data_stream *stream);
-
 int kshark_tep_init_input(struct kshark_data_stream *stream,
 			  const char *file);
 
 int kshark_tep_init_local(struct kshark_data_stream *stream);
 
 void kshark_tep_close_interface(struct kshark_data_stream *stream);
-
-int *kshark_tep_get_event_ids(struct kshark_data_stream *stream);
 
 bool kshark_tep_filter_is_set(struct kshark_data_stream *stream);
 
@@ -56,6 +52,10 @@ struct tep_handle;
 
 /** Get the Page event object used to parse the page. */
 struct tep_handle *kshark_get_tep(struct kshark_data_stream *stream);
+
+struct tracecmd_input;
+
+struct tracecmd_input *kshark_get_tep_input(struct kshark_data_stream *stream);
 
 struct tep_record;
 

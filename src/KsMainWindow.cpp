@@ -636,7 +636,7 @@ void KsMainWindow::_showEvents()
 			 * the CheckBox Widget.
 			 */
 
-			eventIds = kshark_tep_get_event_ids(stream);
+			eventIds = kshark_get_all_event_ids(stream);
 			QVector<int> v(stream->n_events, false);
 			for (int i = 0; i < stream->n_events; ++i) {
 				if (kshark_hash_id_find(stream->show_event_filter,

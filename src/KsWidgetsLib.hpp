@@ -498,6 +498,8 @@ struct KsEventsCheckBoxWidget : public KsCheckBoxTreeWidget
 
 private:
 	void _makeItems(kshark_data_stream *stream, int *eventIds);
+
+	void _makeTepEventItems(kshark_data_stream *stream, int *eventIds);
 };
 
 /**

@@ -76,6 +76,14 @@ typedef void (*time_calib_func) (struct kshark_entry *, int64_t *);
 
 struct kshark_data_stream;
 
+/** A function type to be used to initialize the interface of the data stream. */
+typedef int (*interface_init_func) (struct kshark_data_stream *,
+				    const char *);
+
+/** A function type to be used to initialize the interface of the data stream. */
+typedef int (*interface_close_func) (struct kshark_data_stream *,
+				     const char *);
+
 /** A function type to be used by the method interface of the data stream. */
 typedef char *(*stream_get_str_func) (struct kshark_data_stream *,
 				      const struct kshark_entry *);
@@ -93,12 +101,7 @@ typedef int (*stream_find_id_func) (struct kshark_data_stream *,
 				     const char *);
 
 /** A function type to be used by the method interface of the data stream. */
-typedef void *(*read_at_func) (struct kshark_data_stream *,
-			       uint64_t offset);
-
-/** A function type to be used by the method interface of the data stream. */
-typedef int (*interface_init_func) (struct kshark_data_stream *,
-				    const char *);
+typedef int *(*stream_get_ids_func) (struct kshark_data_stream *);
 
 struct kshark_context;
 
@@ -121,9 +124,6 @@ enum kshark_data_format {
  * the data from a given stream.
  */
 struct kshark_data_stream_interface {
-	/** Method used to initialize the stream. */
-	interface_init_func	init;
-
 	/** Method used to retrieve the Process Id of the entry. */
 	stream_get_int_func	get_pid;
 
@@ -145,11 +145,13 @@ struct kshark_data_stream_interface {
 	/** Method used to retrieve Id of the Event from its name. */
 	stream_find_id_func	find_event_id;
 
+	/**
+	 * Method used to retrieve an arrays containing the Ids of all Events.
+	 */
+	stream_get_ids_func	get_all_event_ids;
+
 	/** Method used to dump the entry's content to string. */
 	stream_get_str_func	dump_entry;
-
-	/** Method used to read the data at particular offset. */
-	read_at_func		read_at;
 
 	/** Method used to load the data. */
 	load_entries_func	load_entries;
@@ -298,6 +300,11 @@ static inline int kshark_get_event_id(const struct kshark_entry *entry)
 
 	stream = kshark_ctx->stream[entry->stream_id];
 	return stream->interface.get_event_id(stream, entry);
+}
+
+static inline int *kshark_get_all_event_ids(struct kshark_data_stream *stream)
+{
+	return stream->interface.get_all_event_ids(stream);
 }
 
 static inline char *kshark_get_event_name(const struct kshark_entry *entry)

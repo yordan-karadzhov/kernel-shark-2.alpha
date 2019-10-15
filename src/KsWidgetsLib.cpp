@@ -839,7 +839,7 @@ void KsCheckBoxTreeWidget::_adjustSize()
 		width = _tree.visualItemRect(_tree.topLevelItem(0)).width();
 	}
 
-	width += FONT_WIDTH*3 + style()->pixelMetric(QStyle::PM_ScrollBarExtent);
+	width += FONT_WIDTH * 3 + style()->pixelMetric(QStyle::PM_ScrollBarExtent);
 	_cbWidget.resize(width, _cbWidget.height());
 
 	for (int i = 0; i < n; ++i)
@@ -945,24 +945,52 @@ KsEventsCheckBoxWidget::KsEventsCheckBoxWidget(kshark_data_stream *stream,
 					       QWidget *parent)
 : KsCheckBoxTreeWidget(stream->stream_id, "Events", parent)
 {
-	int *eventIds;
+	int *eventIds = kshark_get_all_event_ids(stream);
+
+	if(!eventIds)
+		return;
 
 	switch (stream->format) {
 	case KS_TEP_DATA:
-		eventIds = kshark_tep_get_event_ids(stream);
-		break;
+		_makeTepEventItems(stream, eventIds);
+		return;
 
-	case KS_INVALIDE_DATA:
 	default:
-		eventIds = nullptr;
-		break;
-	}
-
-	if (eventIds)
 		_makeItems(stream, eventIds);
+		return;
+	}
 }
 
-void KsEventsCheckBoxWidget::_makeItems(kshark_data_stream *stream, int *eventIds)
+void KsEventsCheckBoxWidget::_makeItems(kshark_data_stream *stream,
+					int *eventIds)
+{
+	QTreeWidgetItem *evtItem;
+	QString evtName;
+	kshark_entry entry;
+
+	_initTree();
+	_tree.setColumnWidth(0, 30 * FONT_WIDTH);
+	_id.resize(stream->n_events);
+	_cb.resize(stream->n_events);
+
+	entry.stream_id = stream->stream_id;
+	entry.visible = 0xff;
+	for (int i = 0; i < stream->n_events; ++i) {
+		entry.event_id = _id[i] = eventIds[i];
+		evtName = kshark_get_event_name(&entry);
+
+		evtItem = new QTreeWidgetItem;
+		evtItem->setText(0, evtName);
+		evtItem->setCheckState(0, Qt::Checked);
+		evtItem->setFlags(evtItem->flags() |
+				  Qt::ItemIsUserCheckable);
+		_tree.addTopLevelItem(evtItem);
+		_cb[i] = evtItem;
+	}
+}
+
+void KsEventsCheckBoxWidget::_makeTepEventItems(kshark_data_stream *stream,
+						int *eventIds)
 {
 	QTreeWidgetItem *sysItem, *evtItem;
 	QString sysName, evtName;
@@ -973,6 +1001,7 @@ void KsEventsCheckBoxWidget::_makeItems(kshark_data_stream *stream, int *eventId
 	_id.resize(stream->n_events);
 	_cb.resize(stream->n_events);
 	while (i < stream->n_events) {
+		qInfo() << i << eventIds[i];
 		name = KsUtils::getTepEvtName(stream, eventIds[i]);
 		sysName = name[0];
 		sysItem = new QTreeWidgetItem;

@@ -244,7 +244,6 @@ int kshark_stream_open(struct kshark_data_stream *stream, const char *file)
 
 	switch (stream->format) {
 	case KS_TEP_DATA:
-		kshark_tep_init_interface(stream);
 		return kshark_tep_init_input(stream, file);
 
 	default:

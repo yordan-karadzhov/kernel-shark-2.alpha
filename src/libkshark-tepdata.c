@@ -58,8 +58,7 @@ struct tep_handle *kshark_get_tep(struct kshark_data_stream *stream)
 	return tep_handle->tep;
 }
 
-static inline struct tracecmd_input *
-get_input(struct kshark_data_stream *stream)
+struct tracecmd_input *kshark_get_tep_input(struct kshark_data_stream *stream)
 {
 	struct tepdata_handle *tep_handle = stream->interface.handle;
 	return tep_handle->input;
@@ -198,7 +197,7 @@ static ssize_t get_records(struct kshark_context *kshark_ctx,
 		cpu_list[cpu] = NULL;
 		temp_next = &cpu_list[cpu];
 
-		rec = tracecmd_read_cpu_first(get_input(stream), cpu);
+		rec = tracecmd_read_cpu_first(kshark_get_tep_input(stream), cpu);
 		while (rec) {
 			*temp_next = temp_rec = calloc(1, sizeof(*temp_rec));
 			if (!temp_rec)
@@ -272,7 +271,7 @@ static ssize_t get_records(struct kshark_context *kshark_ctx,
 			temp_next = &temp_rec->next;
 
 			++count;
-			rec = tracecmd_read_data(get_input(stream), cpu);
+			rec = tracecmd_read_data(kshark_get_tep_input(stream), cpu);
 		}
 
 		total += count;
@@ -465,7 +464,7 @@ static const int tepdata_get_event_id(struct kshark_data_stream *stream,
 		 */
 		pthread_mutex_lock(&stream->input_mutex);
 
-		record = tracecmd_read_at(get_input(stream),
+		record = tracecmd_read_at(kshark_get_tep_input(stream),
 					  entry->offset, NULL);
 
 		if (record)
@@ -552,7 +551,7 @@ static const int tepdata_get_pid(struct kshark_data_stream *stream,
 		 */
 		pthread_mutex_lock(&stream->input_mutex);
 
-		record = tracecmd_read_at(get_input(stream),
+		record = tracecmd_read_at(kshark_get_tep_input(stream),
 					  entry->offset, NULL);
 
 		if (record)
@@ -596,7 +595,7 @@ static char *tepdata_get_latency(struct kshark_data_stream *stream,
 	 */
 	pthread_mutex_lock(&stream->input_mutex);
 
-	record = tracecmd_read_at(get_input(stream), entry->offset, NULL);
+	record = tracecmd_read_at(kshark_get_tep_input(stream), entry->offset, NULL);
 
 	if (!record)
 		return NULL;
@@ -664,7 +663,7 @@ static char *tepdata_get_info(struct kshark_data_stream *stream,
 	 */
 	pthread_mutex_lock(&stream->input_mutex);
 
-	record = tracecmd_read_at(get_input(stream), entry->offset, NULL);
+	record = tracecmd_read_at(kshark_get_tep_input(stream), entry->offset, NULL);
 	if (!record) {
 		pthread_mutex_unlock(&stream->input_mutex);
 		return NULL;
@@ -681,6 +680,20 @@ static char *tepdata_get_info(struct kshark_data_stream *stream,
 	pthread_mutex_unlock(&stream->input_mutex);
 
 	return info;
+}
+
+static int *tepdata_get_event_ids(struct kshark_data_stream *stream)
+{
+	struct tep_event **events;
+	int i, *evt_ids;
+
+	events = tep_list_events(kshark_get_tep(stream), TEP_EVENT_SORT_SYSTEM);
+	evt_ids = malloc(stream->n_events * sizeof(*evt_ids));
+
+	for (i = 0; i < stream->n_events ; ++i)
+		evt_ids[i] = events[i]->id;
+
+	return evt_ids;
 }
 
 /**
@@ -781,12 +794,6 @@ static char *tepdata_dump_entry(struct kshark_data_stream *stream,
 	return entry_str;
 }
 
-static void *tepdata_read_data_at(struct kshark_data_stream *stream,
-			          uint64_t offset)
-{
-	return tracecmd_read_at(get_input(stream), offset, NULL);
-}
-
 static const int tepdata_find_event_id(struct kshark_data_stream *stream,
 				       const char *event_name)
 {
@@ -809,7 +816,7 @@ static const int tepdata_find_event_id(struct kshark_data_stream *stream,
 }
 
 /** Initialize all methods used by a stream of FTRACE data. */
-void kshark_tep_init_interface(struct kshark_data_stream *stream)
+static void kshark_tep_init_methods(struct kshark_data_stream *stream)
 {
 	stream->interface.get_pid = tepdata_get_pid;
 	stream->interface.get_task = tepdata_get_task;
@@ -818,8 +825,8 @@ void kshark_tep_init_interface(struct kshark_data_stream *stream)
 	stream->interface.get_latency = tepdata_get_latency;
 	stream->interface.get_info = tepdata_get_info;
 	stream->interface.find_event_id = tepdata_find_event_id;
+	stream->interface.get_all_event_ids = tepdata_get_event_ids;
 	stream->interface.dump_entry = tepdata_dump_entry;
-	stream->interface.read_at = tepdata_read_data_at;
 	stream->interface.load_entries = kshark_load_tep_entries;
 }
 
@@ -859,6 +866,7 @@ int kshark_tep_init_input(struct kshark_data_stream *stream,
 		tep_filter_alloc(tep_handle->tep);
 
 	stream->interface.handle = tep_handle;
+	kshark_tep_init_methods(stream);
 
 	return 0;
 }
@@ -883,6 +891,7 @@ int kshark_tep_init_local(struct kshark_data_stream *stream)
 		goto fail;
 
 	stream->interface.handle = tep_handle;
+	kshark_tep_init_methods(stream);
 
 	return 0;
 
@@ -994,28 +1003,6 @@ void kshark_tep_filter_reset(struct kshark_data_stream *stream)
 }
 
 /**
- * @brief Get an array containing the unique Ids of all trace event types in
- *	  a given Data stream.
- *
- * @param stream: Input location for the FTRACE data stream pointer.
- *
- * @returns The user is responsible for freeing the returned array.
- */
-int *kshark_tep_get_event_ids(struct kshark_data_stream *stream)
-{
-	struct tep_event **events;
-	int i, *evt_ids;
-
-	events = tep_list_events(kshark_get_tep(stream), TEP_EVENT_SORT_SYSTEM);
-	evt_ids = malloc(stream->n_events * sizeof(*evt_ids));
-
-	for (i = 0; i < stream->n_events ; ++i)
-		evt_ids[i] = events[i]->id;
-
-	return evt_ids;
-}
-
-/**
  * @brief Get the names of all fields of a given event type.
  *
  * @param stream: Input location for the FTRACE data stream pointer.
@@ -1092,7 +1079,7 @@ unsigned long long kshark_tep_read_event_field(struct kshark_entry *entry,
 	if (!evt_field)
 		return 0;
 
-	record = tracecmd_read_at(get_input(stream), entry->offset, NULL);
+	record = tracecmd_read_at(kshark_get_tep_input(stream), entry->offset, NULL);
 	if (!record)
 		return 0;
 

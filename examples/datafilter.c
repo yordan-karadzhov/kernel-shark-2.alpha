@@ -87,7 +87,7 @@ int main(int argc, char **argv)
 
 	/* Show only "sched" events. */
 	n_evts = stream->n_events;
-	evt_ids = kshark_tep_get_event_ids(kshark_ctx->stream[sd]);
+	evt_ids = kshark_get_all_event_ids(kshark_ctx->stream[sd]);
 	for (i = 0; i < n_evts; ++i) {
 		char *event_str =
 			kshark_event_from_id(kshark_ctx->stream[sd], evt_ids[i]);
