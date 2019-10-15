@@ -143,7 +143,7 @@ void KsGLWidget::paintGL()
 void KsGLWidget::reset()
 {
 	_streamPlots.clear();
-	_streamPlots.clear();
+	_comboPlots.clear();
 	_data = nullptr;
 	_model.reset();
 }
