@@ -53,7 +53,6 @@ KsTraceViewer::KsTraceViewer(QWidget *parent)
   _view(this),
   _model(this),
   _proxyModel(this),
-  _tableHeader(_model.header()),
   _toolbar(this),
   _labelSearch("Search: Column", this),
   _labelGrFollows("Graph follows  ", this),
@@ -71,7 +70,7 @@ KsTraceViewer::KsTraceViewer(QWidget *parent)
 
 	/* On the toolbar make two Combo boxes for the search settings. */
 	_toolbar.addWidget(&_labelSearch);
-	_searchFSM._columnComboBox.addItems(_tableHeader);
+	_searchFSM._columnComboBox.addItems(_model.header());
 
 	/*
 	 * Using the old Signal-Slot syntax because
@@ -158,6 +157,7 @@ void KsTraceViewer::loadData(KsDataStore *data)
 {
 	_data = data;
 	_model.reset();
+	_model.updateHeader();
 	_proxyModel.fill(data);
 	_model.fill(data);
 	this->_resizeToContents();
@@ -228,6 +228,7 @@ void  KsTraceViewer::setTopRow(size_t r)
 void KsTraceViewer::update(KsDataStore *data)
 {
 	/* The Proxy model has to be updated first! */
+	_model.updateHeader();
 	_proxyModel.fill(data);
 	_model.update(data);
 	_data = data;
@@ -525,7 +526,7 @@ void KsTraceViewer::markSwitch()
  */
 void KsTraceViewer::resizeEvent(QResizeEvent* event)
 {
-	int nColumns = _tableHeader.count();
+	int nColumns = _model.header().count();
 	int tableSize(0), viewSize, freeSpace;
 
 	_resizeToContents();
@@ -575,7 +576,7 @@ void KsTraceViewer::_resizeToContents()
 	 * resized properly by the code above. We will resize this
 	 * column by hand.
 	 */
-	col = KsViewModel::TRACE_VIEW_STREAM_ID;
+	col = KsViewModel::TRACE_VIEW_COL_STREAM;
 	columnSize = STRING_WIDTH(_model.header()[col]) + FONT_WIDTH;
 	_view.setColumnWidth(col, columnSize);
 

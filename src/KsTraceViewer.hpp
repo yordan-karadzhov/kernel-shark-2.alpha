@@ -99,8 +99,6 @@ private:
 
 	KsFilterProxyModel	_proxyModel;
 
-	QStringList	_tableHeader;
-
 	QToolBar	_toolbar;
 
 	QLabel		_labelSearch, _labelGrFollows;

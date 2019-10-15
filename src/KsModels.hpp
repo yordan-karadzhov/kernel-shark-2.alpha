@@ -92,10 +92,14 @@ public:
 		      search_condition_func cond,
 		      QList<size_t> *matchList);
 
+	void	updateHeader();
+
+	bool singleStream() const {return _singleStream;}
+
 	/** Table columns Identifiers. */
 	enum {
 		/** Identifier of the Data stream. */
-		TRACE_VIEW_STREAM_ID,
+		TRACE_VIEW_COL_STREAM,
 
 		/** Identifier of the Index column. */
 		TRACE_VIEW_COL_INDEX,
@@ -148,6 +152,8 @@ private:
 	QColor			_colorMarkB;
 
 	KsPlot::ColorTable	_streamColors;
+
+	bool			_singleStream;
 };
 
 /**
@@ -196,15 +202,7 @@ public:
 	 * Use the "row" index in the Proxy model to retrieve the "row" index
 	 * in the source model.
 	 */
-	int mapRowFromSource(int r) const
-	{
-		/*
-		 * This works because the row number is shown in column
-		 * TRACE_VIEW_COL_INDEX.
-		 */
-		int col = KsViewModel::TRACE_VIEW_COL_INDEX;
-		return this->data(this->index(r, col)).toInt();
-	}
+	int mapRowFromSource(int r) const;
 
 	/** Get the source model. */
 	KsViewModel *source() {return _source;}

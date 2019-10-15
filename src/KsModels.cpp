@@ -192,16 +192,53 @@ QList<int> KsFilterProxyModel::searchMap(int column,
 	return matchList;
 }
 
+int KsFilterProxyModel::mapRowFromSource(int r) const
+{
+	/*
+	 * This works because the row number is shown in column
+	 * TRACE_VIEW_COL_INDEX (or TRACE_VIEW_COL_INDEX - 1 in the case when
+	 * the Stream Id column is hidden).
+	 */
+	int column = KsViewModel::TRACE_VIEW_COL_INDEX;
+
+	if(_source->singleStream())
+		column--;
+
+	return this->data(this->index(r, column)).toInt();
+}
+
 /** Create default (empty) KsViewModel object. */
 KsViewModel::KsViewModel(QObject *parent)
 : QAbstractTableModel(parent),
   _data(nullptr),
   _nRows(0),
-  _header({" >> ", "#", "CPU", "Time Stamp", "Task", "PID",
-	   "Latency", "Event", "Info"}),
   _markA(KS_NO_ROW_SELECTED),
-  _markB(KS_NO_ROW_SELECTED)
-{}
+  _markB(KS_NO_ROW_SELECTED),
+  _singleStream(true)
+{
+	updateHeader();
+}
+
+void KsViewModel::updateHeader()
+{
+	beginRemoveColumns(QModelIndex(), 0, _header.count());
+	endRemoveColumns();
+
+	_header.clear();
+
+	if (KsUtils::getNStreams() > 1) {
+		_header << " >> ";
+		_singleStream = false;
+	} else {
+		_singleStream = true;
+	}
+
+	_header << "#" << "CPU" << "Time Stamp" << "Task" << "PID"
+		<< "Latency" << "Event" << "Info";
+
+	beginInsertColumns(QModelIndex(), 0, _header.count() - 1);
+	endInsertColumns();
+}
 
 /**
  * Get the data stored under the given role for the item referred to by
@@ -225,7 +262,8 @@ QVariant KsViewModel::data(const QModelIndex &index, int role) const
 		if (index.row() == _markB)
 			return QVariant::fromValue(QColor(_colorMarkB));
 
-		if (index.column() == TRACE_VIEW_STREAM_ID) {
+		if (index.column() == TRACE_VIEW_COL_STREAM &&
+		    !_singleStream) {
 			int sd = _data[index.row()]->stream_id;
 			QColor col;
 			col << KsPlot::getColor(&_streamColors, sd);
@@ -245,8 +283,15 @@ QString KsViewModel::getValueStr(int column, int row) const
 {
 	int pid;
 
+	/*
+	 * If only one Data stream (file) is loaded, the first column
+	 * (TRACE_VIEW_COL_STREAM) is not shown.
+	 */
+	if(_singleStream)
+		column++;
+
 	switch (column) {
-		case TRACE_VIEW_STREAM_ID :
+		case TRACE_VIEW_COL_STREAM :
 			return QString("%1").arg(_data[row]->stream_id);
 		case TRACE_VIEW_COL_INDEX :
 			return QString("%1").arg(row);
