@@ -392,6 +392,11 @@ void KsGLWidget::loadData(KsDataStore *data)
 		sd = streamIds[i];
 		nCPUs = kshark_ctx->stream[sd]->n_cpus;
 		plotVec.clear();
+
+		/* If the number of CPUs is too big show only the first 16. */
+		if (nCPUs > 16)
+			nCPUs = 16;
+
 		for (int i = 0; i < nCPUs; ++i)
 			plotVec.append(i);
 
