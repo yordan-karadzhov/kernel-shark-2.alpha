@@ -234,6 +234,7 @@ void KsTraceViewer::update(KsDataStore *data)
 	_data = data;
 	if (_mState->activeMarker()._isSet)
 		showRow(_mState->activeMarker()._pos, true);
+	_resizeToContents();
 }
 
 void KsTraceViewer::_onCustomContextMenu(const QPoint &point)
