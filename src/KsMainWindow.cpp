@@ -158,9 +158,15 @@ KsMainWindow::~KsMainWindow()
 					_session.getConfDocPtr());
 	}
 
-	_settings.setValue("dataPath", _lastDataFilePath);
-	_settings.setValue("confPath", _lastConfFilePath);
-	_settings.setValue("pluginPath", _lastPluginFilePath);
+	/*
+	 * Do not save the settings if KernelShark is running with Root
+	 * privileges. Otherwise the configuration file will be owned by Root.
+	 */
+	if (geteuid() != 0) {
+		_settings.setValue("dataPath", _lastDataFilePath);
+		_settings.setValue("confPath", _lastConfFilePath);
+		_settings.setValue("pluginPath", _lastPluginFilePath);
+	}
 
 	_data.clear();
 
