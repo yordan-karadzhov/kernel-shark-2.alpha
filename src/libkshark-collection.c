@@ -327,8 +327,8 @@ map_collection_request_init(const struct kshark_entry_collection *col,
 	size_t req_end;
 
 	if (req_tmp->next || col->size == 0) {
-		fprintf(stderr, "Unexpected input in ");
-		fprintf(stderr, "map_collection_request_init()\n");
+		fprintf(stderr,
+			"Unexpected input in map_collection_request_init()\n");
 		goto do_nothing;
 	}
 
@@ -508,8 +508,8 @@ map_collection_back_request(const struct kshark_entry_collection *col,
 	return req_count;
 
 fail:
-	fprintf(stderr, "Failed to allocate memory for ");
-	fprintf(stderr, "Collection data request.\n");
+	fprintf(stderr,
+		"Failed to allocate memory for Collection data request.\n");
 	kshark_free_entry_request(*req);
 	*req = NULL;
 	return -ENOMEM;
@@ -596,8 +596,8 @@ map_collection_front_request(const struct kshark_entry_collection *col,
 	return req_count;
 
 fail:
-	fprintf(stderr, "Failed to allocate memory for ");
-	fprintf(stderr, "Collection data request.\n");
+	fprintf(stderr,
+		"Failed to allocate memory for Collection data request.\n");
 	kshark_free_entry_request(*req);
 	*req = NULL;
 	return -ENOMEM;
@@ -634,6 +634,7 @@ kshark_get_collection_entry_front(struct kshark_entry_request **req,
 				  ssize_t *index)
 {
 	const struct kshark_entry *entry = NULL;
+	struct kshark_entry_request *list;
 	int req_count;
 
 	/*
@@ -643,19 +644,17 @@ kshark_get_collection_entry_front(struct kshark_entry_request **req,
 	 */
 	req_count = map_collection_front_request(col, req);
 
-	if (index && !req_count)
+	if (index && req_count <= 0)
 		*index = KS_EMPTY_BIN;
 
 	/*
 	 * Loop over the list of redefined requests and search until you find
 	 * the first matching entry.
 	 */
-	while (*req) {
-		entry = kshark_get_entry_front(*req, data, index);
+	for (list = *req; list; list = list->next) {
+		entry = kshark_get_entry_front(list, data, index);
 		if (entry)
 			break;
-
-		*req = (*req)->next;
 	}
 
 	return entry;
@@ -692,6 +691,7 @@ kshark_get_collection_entry_back(struct kshark_entry_request **req,
 				 ssize_t *index)
 {
 	const struct kshark_entry *entry = NULL;
+	struct kshark_entry_request *list;
 	int req_count;
 
 	/*
@@ -700,19 +700,17 @@ kshark_get_collection_entry_back(struct kshark_entry_request **req,
 	 * intervals of the collection.
 	 */
 	req_count = map_collection_back_request(col, req);
-	if (index && !req_count)
+	if (index && req_count <= 0)
 		*index = KS_EMPTY_BIN;
 
 	/*
 	 * Loop over the list of redefined requests and search until you find
 	 * the first matching entry.
 	 */
-	while (*req) {
-		entry = kshark_get_entry_back(*req, data, index);
+	for (list = *req; list; list = list->next) {
+		entry = kshark_get_entry_back(list, data, index);
 		if (entry)
 			break;
-
-		*req = (*req)->next;
 	}
 
 	return entry;

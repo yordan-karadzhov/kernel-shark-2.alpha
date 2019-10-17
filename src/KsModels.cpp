@@ -318,7 +318,7 @@ QString KsViewModel::getValueStr(int column, int row) const
 			return QString("%1").arg(pid);
 
 		case TRACE_VIEW_COL_LAT:
-			buffer = kshark_get_task(_data[row]);
+			buffer = kshark_get_latency(_data[row]);
 			return lanMakeString();
 
 		case TRACE_VIEW_COL_EVENT:
