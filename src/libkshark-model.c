@@ -930,7 +930,7 @@ ksmodel_get_entry_front(struct kshark_trace_histo *histo,
 
 	/* Set the position at the beginning of the bin and go forward. */
 	req = ksmodel_entry_front_request_alloc(histo, bin, vis_only,
-							    func, sd, values);
+						func, sd, values);
 	if (!req)
 		return NULL;
 
@@ -978,13 +978,13 @@ ksmodel_get_entry_back(struct kshark_trace_histo *histo,
 
 	/* Set the position at the end of the bin and go backwards. */
 	req = ksmodel_entry_back_request_alloc(histo, bin, vis_only,
-							   func, sd, values);
+					       func, sd, values);
 	if (!req)
 		return NULL;
 
 	if (col && col->size)
 		entry = kshark_get_collection_entry_back(&req, histo->data,
-							  col, index);
+							 col, index);
 	else
 		entry = kshark_get_entry_back(req, histo->data, index);
 
