@@ -281,6 +281,7 @@ QVariant KsViewModel::data(const QModelIndex &index, int role) const
 /** Get the string data stored in a given cell of the table. */
 QString KsViewModel::getValueStr(int column, int row) const
 {
+	char *buffer;
 	int pid;
 
 	/*
@@ -289,6 +290,12 @@ QString KsViewModel::getValueStr(int column, int row) const
 	 */
 	if(_singleStream)
 		column++;
+
+	auto lanMakeString = [&buffer] () {
+		QString str(buffer);
+		free(buffer);
+		return str;
+	};
 
 	switch (column) {
 		case TRACE_VIEW_COL_STREAM :
@@ -303,20 +310,24 @@ QString KsViewModel::getValueStr(int column, int row) const
 			return KsUtils::Ts2String(_data[row]->ts, 6);
 
 		case TRACE_VIEW_COL_COMM:
-			return kshark_get_task(_data[row]);
+			buffer = kshark_get_task(_data[row]);
+			return lanMakeString();
 
 		case TRACE_VIEW_COL_PID:
 			pid = kshark_get_pid(_data[row]);
 			return QString("%1").arg(pid);
 
 		case TRACE_VIEW_COL_LAT:
-			return kshark_get_latency(_data[row]);
+			buffer = kshark_get_task(_data[row]);
+			return lanMakeString();
 
 		case TRACE_VIEW_COL_EVENT:
-			return kshark_get_event_name(_data[row]);
+			buffer = kshark_get_event_name(_data[row]);
+			return lanMakeString();
 
 		case TRACE_VIEW_COL_INFO :
-			return kshark_get_info(_data[row]);
+			buffer = kshark_get_info(_data[row]);
+			return lanMakeString();
 
 		default:
 			return {};
