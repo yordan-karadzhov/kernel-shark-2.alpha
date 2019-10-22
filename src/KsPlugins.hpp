@@ -13,8 +13,14 @@
 #define _KS_PLUGINS_H
 
 // KernelShark
+#include "libkshark-plugin.h"
 #include "libkshark-model.h"
 #include "KsPlotTools.hpp"
+
+typedef void (*pluginMenuFunc) (void *);
+
+class KsMainWindow;
+typedef void (pluginActionFunc) (KsMainWindow *);
 
 /**
  * Structure representing the vector of C++ arguments of the drawing function

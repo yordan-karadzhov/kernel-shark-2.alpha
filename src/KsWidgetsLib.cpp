@@ -200,7 +200,8 @@ KsCheckBoxWidget::KsCheckBoxWidget(int sd, const QString &name,
 
 	_cbWidget.setLayout(&_cbLayout);
 
-	_topLayout.addWidget(&_stramLabel);
+	if (!_stramLabel.text().isEmpty())
+		_topLayout.addWidget(&_stramLabel);
 
 	_tb.addWidget(&_nameLabel);
 	_allCbAction = _tb.addWidget(&_allCb);
@@ -239,6 +240,9 @@ void KsCheckBoxWidget::_setStream(uint8_t sd)
 
 	_sd = sd;
 	stream = kshark_get_data_stream(kshark_ctx, sd);
+	if (!stream)
+		return;
+
 	_streamName = QString(stream->file);
 
 	KsUtils::setElidedText(&_stramLabel, _streamName,
@@ -385,170 +389,6 @@ void KsCheckBoxDialog::_applyPress()
 	}
 
 	_postApplyAction();
-}
-
-/** Create default KsComboPlotDialog. */
-KsComboPlotDialog::KsComboPlotDialog(QWidget *parent)
-: _hostStreamLabel("Host data stream:"),
-  _guestStreamLabel("Guest data stream"),
-  _hostStreamComboBox(this),
-  _guestStreamComboBox(this),
-  _vcpuCheckBoxWidget(nullptr),
-  _hostCheckBoxWidget(nullptr),
-  _applyButton("Apply", this),
-  _cancelButton("Cancel", this)
-{
-	kshark_data_stream *streamHost, *streamGuest;
-	kshark_context *kshark_ctx(nullptr);
-	int *streamIds, buttonWidth;
-	QStringList streamList;
-
-	auto lamAddLine = [&] {
-		QFrame* line = new QFrame();
-
-		line->setFrameShape(QFrame::HLine);
-		line->setFrameShadow(QFrame::Sunken);
-		_topLayout.addWidget(line);
-	};
-
-	setWindowTitle("Combo Plots");
-
-	if (!kshark_instance(&kshark_ctx) ||
-	    kshark_ctx->n_streams < 2)
-		return;
-
-	streamIds = kshark_all_streams(kshark_ctx);
-	_hostStreamComboBox.addItem(QString::number(streamIds[0]));
-
-	for (int i = 1; i < kshark_ctx->n_streams; ++i) {
-		_hostStreamComboBox.addItem(QString::number(streamIds[i]));
-		_guestStreamComboBox.addItem(QString::number(streamIds[i]));
-	}
-
-	_streamMenuLayout.addWidget(&_hostStreamLabel, 0, 0);
-	_streamMenuLayout.addWidget(&_hostStreamComboBox, 0, 1);
-
-	_streamMenuLayout.addWidget(&_guestStreamLabel, 1, 0);
-	_streamMenuLayout.addWidget(&_guestStreamComboBox, 1, 1);
-
-	_topLayout.addLayout(&_streamMenuLayout);
-
-	lamAddLine();
-
-	/*
-	 * Initialize assuming that stream 0 is the Host and stream 1 is
-	 * the Guest.
-	 */
-	streamHost = kshark_ctx->stream[streamIds[0]];
-	streamGuest = kshark_ctx->stream[streamIds[1]];
-
-	free(streamIds);
-
-	_hostCheckBoxWidget = new KsTasksCheckBoxWidget(streamHost,
-							true, this);
-	_hostCheckBoxWidget->setSingleSelection();
-	_hostCheckBoxWidget->setDefault(false);
-
-	_vcpuCheckBoxWidget = new KsCPUCheckBoxWidget(streamGuest,
-						      this);
-	_vcpuCheckBoxWidget->setSingleSelection();
-	_vcpuCheckBoxWidget->setDefault(false);
-
-	_cbLayout.addWidget(_hostCheckBoxWidget);
-	_cbLayout.addWidget(_vcpuCheckBoxWidget);
-
-	_topLayout.addLayout(&_cbLayout);
-
-	buttonWidth = STRING_WIDTH("--Cancel--");
-	_applyButton.setFixedWidth(buttonWidth);
-	_cancelButton.setFixedWidth(buttonWidth);
-
-	_buttonLayout.addWidget(&_applyButton);
-	_applyButton.setAutoDefault(false);
-
-	_buttonLayout.addWidget(&_cancelButton);
-	_cancelButton.setAutoDefault(false);
-
-	_buttonLayout.setAlignment(Qt::AlignLeft);
-	_topLayout.addLayout(&_buttonLayout);
-
-	_applyButtonConnection =
-		connect(&_applyButton,	&QPushButton::pressed,
-			this,		&KsComboPlotDialog::_applyPress);
-
-	connect(&_applyButton,	&QPushButton::pressed,
-		this,		&QWidget::close);
-
-	connect(&_cancelButton,	&QPushButton::pressed,
-		this,		&QWidget::close);
-
-	/*
-	 * Using the old Signal-Slot syntax because QComboBox::currentIndexChanged
-	 * has overloads.
-	 */
-	connect(&_hostStreamComboBox,	SIGNAL(currentIndexChanged(const QString &)),
-		this,			SLOT(_hostStreamChanged(const QString &)));
-
-	connect(&_guestStreamComboBox,	SIGNAL(currentIndexChanged(const QString &)),
-		this,			SLOT(_guestStreamChanged(const QString &)));
-
-	setLayout(&_topLayout);
-}
-
-void KsComboPlotDialog::_applyPress()
-{
-	QVector<int> combo(4);
-
-	/*
-	 * Disconnect _applyButton. This is done in order to protect
-	 * against multiple clicks.
-	 */
-	disconnect(_applyButtonConnection);
-
-	combo[0] = _hostStreamComboBox.currentText().toInt();
-	combo[1] = _hostCheckBoxWidget->getCheckedIds()[0];
-	combo[2] = _guestStreamComboBox.currentText().toInt();
-	combo[3] = _vcpuCheckBoxWidget->getCheckedIds()[0];
-
-	emit apply(-1, combo);
-}
-
-void KsComboPlotDialog::_hostStreamChanged(const QString &sdStr)
-{
-	kshark_context *kshark_ctx(nullptr);
-	int *streamIds, sdHost;
-	QStringList streamList;
-
-	if (!kshark_instance(&kshark_ctx))
-		return;
-
-	sdHost = sdStr.toInt();
-	_guestStreamComboBox.clear();
-	streamIds = kshark_all_streams(kshark_ctx);
-	for (int i = 0; i < kshark_ctx->n_streams; ++i)
-		if (sdHost != streamIds[i])
-			_guestStreamComboBox.addItem(QString::number(streamIds[i]));
-
-	free(streamIds);
-}
-
-void KsComboPlotDialog::_guestStreamChanged(const QString &sdStr)
-{
-	kshark_context *kshark_ctx(nullptr);
-	kshark_data_stream *stream;
-	int sdGuest;
-
-	if (!kshark_instance(&kshark_ctx))
-		return;
-
-	sdGuest = sdStr.toInt();
-	stream = kshark_get_data_stream(kshark_ctx, sdGuest);
-
-	delete _vcpuCheckBoxWidget;
-
-	_vcpuCheckBoxWidget = new KsCPUCheckBoxWidget(stream, this);
-	_vcpuCheckBoxWidget->setDefault(false);
-	_cbLayout.addWidget(_vcpuCheckBoxWidget);
 }
 
 /**

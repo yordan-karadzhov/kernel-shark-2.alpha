@@ -402,21 +402,21 @@ void KsTraceGraph::taskReDraw(int sd, QVector<int> v)
  * @param sd: Data stream identifier.
  * @param v: Process ids of the tasks to be plotted.
  */
-void KsTraceGraph::comboReDraw(int sd, QVector<int> v)
+void KsTraceGraph::comboReDraw(int nCombos, QVector<int> v)
 {
 	KsVirtComboPlot combo;
 
-	combo._hostStreamId = v[0];
-	combo._hostPid = v[1];
-	combo._guestStreamId = v[2];
-	combo._vcpu = v[3];
-	combo._hostBase = 0;
-	combo._vcpuBase = 0;
+	_glWindow._comboPlots.clear();
 
-// 	if (_glWindow._comboPlots.contains(combo))
-// 		return;
-
-	_glWindow._comboPlots.append(combo);
+	for (int i = 0; i < nCombos; ++i) {
+		combo._hostStreamId = v[i * 4];
+		combo._hostPid = v[i * 4 + 1];
+		combo._guestStreamId = v[i * 4 + 2];
+		combo._vcpu = v[i * 4 + 3];
+		combo._hostBase = 0;
+		combo._vcpuBase = 0;
+		_glWindow._comboPlots.append(combo);
+	}
 
 	_selfUpdate();
 }

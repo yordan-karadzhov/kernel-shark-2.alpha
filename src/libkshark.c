@@ -870,8 +870,8 @@ bool kshark_match_event_and_pid(struct kshark_context *kshark_ctx,
 				int sd, int *values)
 {
 	return e->stream_id == sd &&
-	       e->pid == values[0] &&
-	       e->event_id == values[1];
+	       e->pid == values[1] &&
+	       e->event_id == values[0];
 }
 
 /**

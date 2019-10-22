@@ -255,8 +255,7 @@ public:
 	/** A lists of registered user plugins per stream. */
 	QMap<int, QVector<int>>	_registeredUserPlugins;
 
-	void registerFromList(kshark_context *kshark_ctx);
-	void unregisterFromList(kshark_context *kshark_ctx);
+	void registerPluginMenues();
 
 	void registerPlugin(const QString &plugin);
 
@@ -296,6 +295,10 @@ signals:
 
 private:
 	void _parsePluginList();
+
+	void _registerFromList(kshark_context *kshark_ctx);
+
+	void _unregisterFromList(kshark_context *kshark_ctx);
 
 	char *_pluginLibFromName(const QString &plugin, int &n);
 

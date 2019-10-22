@@ -86,7 +86,6 @@ int kshark_register_event_handler(struct kshark_event_handler **handlers,
 {
 	struct kshark_event_handler *handler =
 		gui_event_handler_alloc(event_id, sd, evt_func, dw_func);
-	printf("%i %i  kshark_event_handler: %p\n", event_id, sd, handler);
 
 	if(!handler)
 		return -ENOMEM;

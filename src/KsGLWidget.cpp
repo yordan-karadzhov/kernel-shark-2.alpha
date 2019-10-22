@@ -628,7 +628,7 @@ void KsGLWidget::_makeGraphs()
 							   cp._guestStreamId,
 							   cp._vcpu);
 		int sd = cp._hostStreamId, pid = cp._hostPid;
-		std::string name = KsUtils::taskPlotName(sd, pid).toStdString();
+		std::string name = "host-" + std::to_string(pid);
 
 		graph->setBase(base);
 		_comboGraphs.append(graph);
@@ -643,6 +643,7 @@ void KsGLWidget::_makeGraphs()
 
 		sd = cp._guestStreamId;
 		name = KsUtils::cpuPlotName(cp._vcpu).toStdString();
+		name = "v" + name;
 		graph->_guest.setLabelText(name);
 		graph->_guest.setLabelAppearance(&_font,
 						 KsPlot::getColor(&_streamColors, sd),

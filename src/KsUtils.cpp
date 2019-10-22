@@ -9,10 +9,14 @@
  *  @brief   KernelShark Utils.
  */
 
+// C
+#include <dlfcn.h>
+
 // KernelShark
 #include "libkshark-plugin.h"
 #include "libkshark-tepdata.h"
 #include "KsUtils.hpp"
+#include "KsPlugins.hpp"
 #include "KsWidgetsLib.hpp"
 
 namespace KsUtils {
@@ -801,8 +805,7 @@ KsPluginManager::KsPluginManager(QWidget *parent)
 	if (!kshark_instance(&kshark_ctx))
 		return;
 
-	registerFromList(kshark_ctx);
-	qInfo() << _registeredKsPlugins;
+	_registerFromList(kshark_ctx);
 }
 
 KsPluginManager::~KsPluginManager()
@@ -812,7 +815,7 @@ KsPluginManager::~KsPluginManager()
 	if (!kshark_instance(&kshark_ctx))
 		return;
 
-	unregisterFromList(kshark_ctx);
+	_unregisterFromList(kshark_ctx);
 }
 
 /** Parse the plugin list declared in the CMake-generated header file. */
@@ -849,26 +852,26 @@ void KsPluginManager::_parsePluginList()
  * Register the plugins by using the information in "_ksPluginList" and
  * "_registeredKsPlugins".
  */
-void KsPluginManager::registerFromList(kshark_context *kshark_ctx)
+void KsPluginManager::_registerFromList(kshark_context *kshark_ctx)
 {
-	qInfo() << "registerFromList" << _ksPluginList;
-	auto lamRegBuiltIn = [&kshark_ctx, this](const QString &plugin)
+	auto lamRegBuiltIn = [&kshark_ctx, this](const QString &pluginStr)
 	{
 		char *lib;
 		int n;
 
-		lib = _pluginLibFromName(plugin, n);
+		lib = _pluginLibFromName(pluginStr, n);
 		if (n <= 0)
 			return;
 
 		qInfo() << "reg" << lib;
 		kshark_register_plugin(kshark_ctx, lib);
+
 		free(lib);
 	};
 
-	auto lamRegUser = [&kshark_ctx](const QString &plugin)
+	auto lamRegUser = [&kshark_ctx](const QString &pluginStr)
 	{
-		std::string lib = plugin.toStdString();
+		std::string lib = pluginStr.toStdString();
 		kshark_register_plugin(kshark_ctx, lib.c_str());
 	};
 
@@ -894,7 +897,7 @@ void KsPluginManager::registerFromList(kshark_context *kshark_ctx)
  * Unegister the plugins by using the information in "_ksPluginList" and
  * "_registeredKsPlugins".
  */
-void KsPluginManager::unregisterFromList(kshark_context *kshark_ctx)
+void KsPluginManager::_unregisterFromList(kshark_context *kshark_ctx)
 {
 	auto lamUregBuiltIn = [&kshark_ctx, this](const QString &plugin)
 	{
@@ -921,6 +924,27 @@ void KsPluginManager::unregisterFromList(kshark_context *kshark_ctx)
 
 	for (auto const &p: _userPluginList)
 		lamUregUser(p);
+}
+
+void KsPluginManager::registerPluginMenues()
+{
+	kshark_context *kshark_ctx(nullptr);
+	kshark_plugin_list *plugin;
+	pluginMenuFunc addMenuFunc;
+	void *funcPtr;
+
+	if (!kshark_instance(&kshark_ctx))
+		return;
+
+	for (plugin = kshark_ctx->plugins; plugin; plugin = plugin->next)
+		if (plugin->handle) {
+			funcPtr = dlsym(plugin->handle,
+					KSHARK_PLUGIN_MENU_INITIALIZER_NAME);
+
+			addMenuFunc = (pluginMenuFunc) funcPtr;
+			if (addMenuFunc)
+				addMenuFunc(parent());
+		}
 }
 
 char *KsPluginManager::_pluginLibFromName(const QString &plugin, int &n)
@@ -1063,7 +1087,7 @@ void KsPluginManager::addPlugins(const QStringList &fileNames)
 	emit dataReload();
 }
 
-/** @brief Update (change) the Plugins for a given Data stream.
+/** @brief Update (change) the plugins for a given Data stream.
  *
  * @param sd: Data stream identifier.
  * @param pluginStates: A vector of plugin's states (0 or 1) telling which

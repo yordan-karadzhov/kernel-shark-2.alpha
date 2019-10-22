@@ -19,6 +19,7 @@
 // KernelShark
 #include "KsTraceViewer.hpp"
 #include "KsTraceGraph.hpp"
+#include "KsPlugins.hpp"
 #include "KsSession.hpp"
 #include "KsUtils.hpp"
 
@@ -71,6 +72,10 @@ public:
 			_changeScreenMode();
 	}
 
+	void addPluginMenu(QString place, pluginActionFunc action);
+
+	KsTraceGraph *graphPtr() {return &_graph;}
+
 private:
 	QSplitter	_splitter;
 
@@ -86,6 +91,7 @@ private:
 	/** Widget for graphical visualization of the trace data. */
 	KsTraceGraph	_graph;
 
+private:
 	/** Dual Marker State Machine. */
 	KsDualMarkerSM	_mState;
 
@@ -134,8 +140,6 @@ private:
 	QAction		_cpuSelectAction;
 
 	QAction		_taskSelectAction;
-
-	QAction		_virtComboSelectAction;
 
 	// Tools menu.
 	QAction		_managePluginsAction;
@@ -210,6 +214,8 @@ private:
 	void _virtComboSelect();
 
 	void _pluginSelect();
+
+	void _pluginUpdate(int sd, QVector<int> pluginStates);
 
 	void _pluginAdd();
 

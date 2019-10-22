@@ -43,8 +43,9 @@ int kshark_tep_get_event_fields(struct kshark_data_stream *stream,
 				int event_id,
 				char ***fields);
 
-unsigned long long kshark_tep_read_event_field(struct kshark_entry *entry,
-					       const char *field);
+unsigned long long kshark_tep_read_event_field(const struct kshark_entry *entry,
+					       const char *field,
+					       unsigned long long err_val);
 
 char **kshark_tracecmd_local_plugins();
 

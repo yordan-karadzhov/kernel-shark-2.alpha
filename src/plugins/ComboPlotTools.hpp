@@ -25,7 +25,7 @@ static void drawVitrBridges(kshark_trace_histo *histo,
 	KsPlot::VirtGap *gap = new KsPlot::VirtGap(gapHeight);
 	const kshark_entry *entry, *exit;
 	ssize_t indexEntry, indexExit;
-	int values[2] = {pidHost, -1};
+	int values[2] = {-1, pidHost};
 
 	bridge->_size = 2;
 	bridge->_visible = false;
@@ -89,13 +89,13 @@ static void drawVitrBridges(kshark_trace_histo *histo,
 	};
 
 	for (int bin = 0; bin < histo->n_bins; ++bin) {
-		values[1] = vcpuEntryId;
+		values[0] = vcpuEntryId;
 		entry = ksmodel_get_entry_back(histo, bin, true,
 					       kshark_match_event_and_pid,
 					       sdHost, values,
 					       nullptr, &indexEntry);
 
-		values[1] = vcpuExitId;
+		values[0] = vcpuExitId;
 		exit = ksmodel_get_entry_back(histo, bin, true,
 					      kshark_match_event_and_pid,
 					      sdHost, values,

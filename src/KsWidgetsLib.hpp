@@ -408,49 +408,6 @@ private:
 };
 
 /**
- * The KsComboPlotDialog class provides a widget for selecting Combo plots to
- * show.
- */
-class KsComboPlotDialog : public QDialog
-{
-	Q_OBJECT
-public:
-	explicit KsComboPlotDialog(QWidget *parent = nullptr);
-
-signals:
-	/** Signal emitted when the "Apply" button is pressed. */
-	void apply(int sd, QVector<int>);
-
-private:
-	QVBoxLayout			_topLayout;
-
-	QGridLayout			_streamMenuLayout;
-
-	QHBoxLayout			_cbLayout, _buttonLayout;
-
-	QLabel				_hostStreamLabel, _guestStreamLabel;
-
-	QComboBox			_hostStreamComboBox;
-
-	QComboBox			_guestStreamComboBox;
-
-	KsCheckBoxTreeWidget		*_vcpuCheckBoxWidget;
-
-	KsCheckBoxTableWidget		*_hostCheckBoxWidget;
-
-	QPushButton			_applyButton, _cancelButton;
-
-	QMetaObject::Connection		_applyButtonConnection;
-
-	void _applyPress();
-
-private slots:
-	void _hostStreamChanged(const QString&);
-
-	void _guestStreamChanged(const QString&);
-};
-
-/**
  * The KsCPUCheckBoxWidget class provides a widget for selecting CPU plots to
  * show.
  */

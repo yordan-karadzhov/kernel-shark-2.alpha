@@ -62,7 +62,6 @@ KsMainWindow::KsMainWindow(QWidget *parent)
   _clearAllFilters("Clear all filters", this),
   _cpuSelectAction("CPUs", this),
   _taskSelectAction("Tasks", this),
-  _virtComboSelectAction("Virt. Combos", this),
   _managePluginsAction("Manage plugins", this),
   _addPluginsAction("Add plugins", this),
   _captureAction("Record", this),
@@ -81,6 +80,7 @@ KsMainWindow::KsMainWindow(QWidget *parent)
 	_createActions();
 	_createMenus();
 	_initCapture();
+        _plugins.registerPluginMenues();
 
 	if (geteuid() == 0)
 		_rootWarning();
@@ -271,9 +271,6 @@ void KsMainWindow::_createActions()
 	connect(&_taskSelectAction,	&QAction::triggered,
 		this,			&KsMainWindow::_taskSelect);
 
-	connect(&_virtComboSelectAction,&QAction::triggered,
-		this,			&KsMainWindow::_virtComboSelect);
-
 	/* Tools menu */
 	_managePluginsAction.setShortcut(tr("Ctrl+P"));
 	_managePluginsAction.setIcon(QIcon::fromTheme("preferences-system"));
@@ -394,7 +391,6 @@ void KsMainWindow::_createMenus()
 	plots = menuBar()->addMenu("Plots");
 	plots->addAction(&_cpuSelectAction);
 	plots->addAction(&_taskSelectAction);
-	plots->addAction(&_virtComboSelectAction);
 
 	/* Tools menu */
 	tools = menuBar()->addMenu("Tools");
@@ -411,6 +407,26 @@ void KsMainWindow::_createMenus()
 	help->addAction(&_aboutAction);
 	help->addAction(&_contentsAction);
 	help->addAction(&_bugReportAction);
+}
+
+void KsMainWindow::addPluginMenu(QString place, pluginActionFunc func)
+{
+	QStringList dialogPath = place.split("/");
+	QAction *pluginAction;
+
+	auto lamAddMenu = [this, func] () {
+		func(this);
+	};
+
+	for (auto &m:  menuBar()->findChildren<QMenu*>()) {
+		if(dialogPath[0] == m->menuAction()->text()) {
+			pluginAction = new QAction(dialogPath[1], this);
+			m->addAction(pluginAction);
+
+			connect(pluginAction,	&QAction::triggered,
+				lamAddMenu);
+		}
+	}
 }
 
 void KsMainWindow::_open()
@@ -936,22 +952,6 @@ void KsMainWindow::_taskSelect()
 	dialog->show();
 }
 
-void KsMainWindow::_virtComboSelect()
-{
-	kshark_context *kshark_ctx(nullptr);
-	KsComboPlotDialog *dialog;
-
-	if (!kshark_instance(&kshark_ctx))
-		return;
-
-	dialog = new KsComboPlotDialog(this);
-
-	connect(dialog,		&KsComboPlotDialog::apply,
-		&_graph,	&KsTraceGraph::comboReDraw);
-
-	dialog->show();
-}
-
 void KsMainWindow::_pluginSelect()
 {
 	kshark_context *kshark_ctx(nullptr);
@@ -975,16 +975,33 @@ void KsMainWindow::_pluginSelect()
 	}
 
 	free(streamIds);
-
 	dialog = new KsPluginsCheckBoxDialog(cbds, &_data, this);
 	dialog->applyStatus();
 
 	connect(dialog,		&KsCheckBoxDialog::apply,
-		&_plugins,	&KsPluginManager::updatePlugins);
+		this,		&KsMainWindow::_pluginUpdate);
 
 	dialog->show();
 
 	_graph.update(&_data);
+}
+
+void KsMainWindow::_pluginUpdate(int sd, QVector<int> pluginStates)
+{
+	kshark_context *kshark_ctx(nullptr);
+	int *streamIds;
+
+	if (!kshark_instance(&kshark_ctx))
+		return;
+
+	streamIds = kshark_all_streams(kshark_ctx);
+	_plugins.updatePlugins(sd, pluginStates);
+	if (sd == streamIds[kshark_ctx->n_streams - 1]) {
+		/* This is the last stream, Reload all data. */
+		_data.reload();
+	}
+
+	free(streamIds);
 }
 
 void KsMainWindow::_pluginAdd()

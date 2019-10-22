@@ -34,12 +34,19 @@ struct plugin_kvm_context {
 
 	/** kvm_exit Id. */
 	int vm_exit_id;
+
+	/** Hash table of the vCPU tasks. */
+	struct kshark_hash_id	*vcpu_pids;
 };
 
 struct plugin_kvm_context *get_kvm_context(int sd);
 
+void init_menu(void *ks_ptr);
+
 void draw_kvm_combos(struct kshark_cpp_argv *argv,
 		     int sd, int pid, int draw_action);
+
+void plugin_kvm_add_menu(void *ks_ptr);
 
 #ifdef __cplusplus
 }

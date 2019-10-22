@@ -1050,11 +1050,13 @@ int kshark_tep_get_event_fields(struct kshark_data_stream *stream,
  *
  * @param entry: The entry accessed with the record.
  * @param field: The name of the field.
+ * @param err_val: The value to be returned in the case of an error.
  *
- * @return The value of the field on success, or zero on failure.
+ * @return The value of the field on success, or "err_val" on failure.
  */
-unsigned long long kshark_tep_read_event_field(struct kshark_entry *entry,
-					       const char *field)
+unsigned long long kshark_tep_read_event_field(const struct kshark_entry *entry,
+					       const char *field,
+					       unsigned long long err_val)
 {
 	struct kshark_context *kshark_ctx = NULL;
 	struct tep_format_field *evt_field;
@@ -1065,29 +1067,29 @@ unsigned long long kshark_tep_read_event_field(struct kshark_entry *entry,
 	int ret;
 
 	if (!kshark_instance(&kshark_ctx))
-		return 0;
+		return err_val;
 
 	stream = kshark_get_data_stream(kshark_ctx, entry->stream_id);
 	if (!stream)
-		return 0;
+		return err_val;
 
 	event = tep_find_event(kshark_get_tep(stream), entry->event_id);
 	if (!event)
-		return 0;
+		return err_val;
 
 	evt_field = tep_find_any_field(event, field);
 	if (!evt_field)
-		return 0;
+		return err_val;
 
 	record = tracecmd_read_at(kshark_get_tep_input(stream), entry->offset, NULL);
 	if (!record)
-		return 0;
+		return err_val;
 
 	ret = tep_read_number_field(evt_field, record->data, &val);
 	free_record(record);
 
 	if (ret != 0)
-		return 0;
+		return err_val;
 
 	return val;
 }
