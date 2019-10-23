@@ -507,9 +507,6 @@ void KsSession::_saveComboPlots(KsGLWidget *glw)
 	int var, nCombos = glw->_comboPlots.count();
 	json_object *jcombo, *jplots;
 
-	if (!nCombos)
-		return;
-
 	jplots = json_object_new_array();
 	for (int i = 0; i < nCombos; ++i) {
 		jcombo = json_object_new_array();
@@ -630,7 +627,7 @@ QVector<QVector<int>> KsSession::_getComboPlots()
  */
 void KsSession::saveDualMarker(KsDualMarkerSM *dm)
 {
-	struct kshark_config_doc *markers =
+	kshark_config_doc *markers =
 		kshark_config_new("kshark.config.markers", KS_CONFIG_JSON);
 	json_object *jd_mark = KS_JSON_CAST(markers->conf_doc);
 
@@ -699,7 +696,7 @@ void KsSession::loadDualMarker(KsDualMarkerSM *dm, KsTraceGraph *graphs)
 
 json_object *KsSession::_getMarkerJson()
 {
-	struct kshark_config_doc *markers =
+	kshark_config_doc *markers =
 		kshark_config_alloc(KS_CONFIG_JSON);
 
 	if (!kshark_config_doc_get(_config, "Markers", markers) ||
@@ -754,31 +751,40 @@ DualMarkerState KsSession::_getMarkerState()
  */
 void KsSession::savePlugins(const KsPluginManager &pm)
 {
-// 	struct kshark_config_doc *plugins =
-// 		kshark_config_new("kshark.config.plugins", KS_CONFIG_JSON);
-// 	json_object *jplugins = KS_JSON_CAST(plugins->conf_doc);
-// 	const QVector<bool> &registeredPlugins = pm._registeredKsPlugins;
-// 	const QStringList &pluginList = pm._ksPluginList;
-// 	int nPlugins = pluginList.length();
-// 	json_object *jlist, *jpl;
-// 	QByteArray array;
-// 	char* buffer;
-// 	bool active;
-// 
-// 	jlist = json_object_new_array();
-// 	for (int i = 0; i < nPlugins; ++i) {
-// 		array = pluginList[i].toLocal8Bit();
-// 		buffer = array.data();
-// 		jpl = json_object_new_array();
-// 		json_object_array_put_idx(jpl, 0, json_object_new_string(buffer));
-// 
-// 		active = registeredPlugins[i];
-// 		json_object_array_put_idx(jpl, 1, json_object_new_boolean(active));
-// 		json_object_array_put_idx(jlist, i, jpl);
-// 	}
-// 
-// 	json_object_object_add(jplugins, "Plugin List", jlist);
-// 	kshark_config_doc_add(_config, "Plugins", plugins);
+	kshark_config_doc *plugins =
+		kshark_config_new("kshark.config.plugins", KS_CONFIG_JSON);
+	json_object *jplugins = KS_JSON_CAST(plugins->conf_doc);
+	const KsPluginMap &registeredPlugins = pm._registeredKsPlugins;
+	const QStringList &pluginList = pm._ksPluginList;
+	json_object *jpl, *jmap, *jstream, *jlist;
+
+	jpl = json_object_new_array();
+	for (auto &p: pluginList) {
+		std::string name = p.toStdString();
+		json_object_array_add(jpl, json_object_new_string(name.c_str()));
+	}
+	json_object_object_add(jplugins, "Plugin List", jpl);
+
+	jmap = json_object_new_array();
+	for (auto &s: registeredPlugins.keys()) {
+		jstream = json_object_new_object();
+		if (s < 0)
+			json_object_object_add(jstream, "stream",
+					       json_object_new_string("default"));
+		else
+			json_object_object_add(jstream, "stream",
+					       json_object_new_int(s));
+
+		jlist = json_object_new_array();
+		for (auto &p: registeredPlugins[s])
+			json_object_array_add(jlist, json_object_new_int(p));
+		json_object_object_add(jstream, "registered", jlist);
+
+		json_object_array_add(jmap, jstream);
+	}
+	json_object_object_add(jplugins, "Stream map", jmap);
+
+	kshark_config_doc_add(_config, "Plugins", plugins);
 }
 
 /**

@@ -234,6 +234,8 @@ private:
 	void _applyIdFilter(int filterId, QVector<int> vec, int sd);
 };
 
+typedef QMap<int, QVector<int>> KsPluginMap;
+
 /** A Plugin Manager class. */
 class KsPluginManager : public QObject
 {
@@ -247,13 +249,13 @@ public:
 	QStringList			_ksPluginList;
 
 	/** A lists of registered built-in plugins per stream. */
-	QMap<int, QVector<int>>	_registeredKsPlugins;
+	KsPluginMap		_registeredKsPlugins;
 
 	/** A list of available user plugins. */
 	QStringList			_userPluginList;
 
 	/** A lists of registered user plugins per stream. */
-	QMap<int, QVector<int>>	_registeredUserPlugins;
+	KsPluginMap		_registeredUserPlugins;
 
 	void registerPluginMenues();
 
@@ -267,7 +269,6 @@ public:
 	{
 		_registeredKsPlugins[sd] = _registeredKsPlugins[-1];
 		_registeredUserPlugins[sd] = _registeredUserPlugins[-1];
-		qInfo() << "addStream" << sd << _registeredKsPlugins[sd] << _registeredUserPlugins[sd];
 	}
 
 	void updatePlugins(int sd, QVector<int> pluginId);
