@@ -162,6 +162,9 @@ void KsTraceViewer::loadData(KsDataStore *data)
 	_model.fill(data);
 	this->_resizeToContents();
 
+	_searchFSM._columnComboBox.clear();
+	_searchFSM._columnComboBox.addItems(_model.header());
+
 	this->setMinimumHeight(SCREEN_HEIGHT / 5);
 }
 
@@ -601,7 +604,16 @@ size_t KsTraceViewer::_searchItems()
 {
 	int column = _searchFSM._columnComboBox.currentIndex();
 	QString searchText = _searchFSM._searchLineEdit.text();
-	int count, dataRow;
+	int count, dataRow, columnIndex = column;
+
+	if (_model.singleStream()) {
+		/*
+		 * If only one Data stream (file) is loaded, the first column
+		 * (TRACE_VIEW_COL_STREAM) is not shown. The column index has
+		 * to be corrected.
+		 */
+		++columnIndex;
+	}
 
 	if (searchText.isEmpty()) {
 		/*
@@ -623,8 +635,8 @@ size_t KsTraceViewer::_searchItems()
 	} else {
 		_searchFSM.handleInput(sm_input_t::Start);
 
-		if (column == KsViewModel::TRACE_VIEW_COL_INFO ||
-		    column == KsViewModel::TRACE_VIEW_COL_LAT)
+		if (columnIndex == KsViewModel::TRACE_VIEW_COL_INFO ||
+		    columnIndex == KsViewModel::TRACE_VIEW_COL_LAT)
 			_proxyModel.search(&_searchFSM, &_matchList);
 		else
 			_searchItemsMapReduce(column, searchText, _searchFSM.condition());
