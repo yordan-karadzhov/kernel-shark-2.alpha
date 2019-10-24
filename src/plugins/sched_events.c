@@ -80,20 +80,20 @@ static struct plugin_sched_context *get_sched_context(int sd)
 struct kshark_hash_id *get_second_pass_hash(int sd)
 {
 	struct plugin_sched_context *plugin_ctx = get_sched_context(sd);
-	if (plugin_ctx)
+	if (!plugin_ctx)
 		return NULL;
 
 	return plugin_ctx->second_pass_hash;
 }
 
 /** Get the list of per Data stream collections of the plugin. */
-struct kshark_entry_collection *get_collections(int sd)
+struct kshark_entry_collection **get_collections_ptr(int sd)
 {
 	struct plugin_sched_context *plugin_ctx = get_sched_context(sd);
-	if (plugin_ctx)
+	if (!plugin_ctx)
 		return NULL;
 
-	return plugin_ctx->collections;
+	return &plugin_ctx->collections;
 }
 
 static bool

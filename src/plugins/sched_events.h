@@ -22,7 +22,7 @@ extern "C" {
 
 struct kshark_hash_id *get_second_pass_hash(int sd);
 
-struct kshark_entry_collection *get_collections(int sd);
+struct kshark_entry_collection **get_collections_ptr(int sd);
 
 bool plugin_wakeup_match_rec_pid(struct kshark_context *kshark_ctx,
 				 struct kshark_entry *e, int sd, int *pid);

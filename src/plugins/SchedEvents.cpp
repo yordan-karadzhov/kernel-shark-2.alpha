@@ -256,7 +256,7 @@ static void secondPass(kshark_entry **data,
  */
 void plugin_draw(kshark_cpp_argv *argv_c, int sd, int pid, int draw_action)
 {
-	kshark_entry_collection *collections, *col;
+	kshark_entry_collection *col, **collections_ptr;
 	kshark_hash_id *second_pass_hash;
 	kshark_context *kshark_ctx(NULL);
 
@@ -264,10 +264,9 @@ void plugin_draw(kshark_cpp_argv *argv_c, int sd, int pid, int draw_action)
 		return;
 
 	second_pass_hash = get_second_pass_hash(sd);
-	collections = get_collections(sd);
+	collections_ptr = get_collections_ptr(sd);
 	if (!kshark_instance(&kshark_ctx) ||
-	    !second_pass_hash ||
-	    !collections)
+	    !second_pass_hash)
 		return;
 
 	KsCppArgV *argvCpp = KS_ARGV_TO_CPP(argv_c);
@@ -276,7 +275,7 @@ void plugin_draw(kshark_cpp_argv *argv_c, int sd, int pid, int draw_action)
 	 * Try to find a collections for this task. It is OK if
 	 * coll = NULL.
 	 */
-	col = kshark_find_data_collection(collections, plugin_match_pid,
+	col = kshark_find_data_collection(*collections_ptr, plugin_match_pid,
 					  sd, &pid, 1);
 	if (!col) {
 		/*
@@ -287,7 +286,7 @@ void plugin_draw(kshark_cpp_argv *argv_c, int sd, int pid, int draw_action)
 		int size = argvCpp->_histo->data_size;
 
 		col = kshark_add_collection_to_list(kshark_ctx,
-						    &collections,
+						    collections_ptr,
 						    data, size,
 						    plugin_match_pid,
 						    sd, &pid, 1,
