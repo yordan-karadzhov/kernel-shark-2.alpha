@@ -841,7 +841,6 @@ void KsEventsCheckBoxWidget::_makeTepEventItems(kshark_data_stream *stream,
 	_id.resize(stream->n_events);
 	_cb.resize(stream->n_events);
 	while (i < stream->n_events) {
-		qInfo() << i << eventIds[i];
 		name = KsUtils::getTepEvtName(stream, eventIds[i]);
 		sysName = name[0];
 		sysItem = new QTreeWidgetItem;
@@ -987,7 +986,7 @@ KsTasksCheckBoxWidget::KsTasksCheckBoxWidget(kshark_data_stream *stream,
  */
 KsPluginCheckBoxWidget::KsPluginCheckBoxWidget(int sd, QStringList pluginList,
 					       QWidget *parent)
-: KsCheckBoxTableWidget(sd, "Plugins", parent)
+: KsCheckBoxTableWidget(sd, "Manage plugins", parent)
 {
 	QTableWidgetItem *nameItem, *infoItem;
 	QStringList headers;

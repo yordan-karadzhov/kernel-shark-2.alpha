@@ -23,6 +23,8 @@
 #include "KsPlugins.hpp"
 #include "KVMCombo.hpp"
 
+using namespace KsWidgetsLib;
+
 /**
  * @brief Plugin's draw function.
  *
@@ -46,8 +48,6 @@ void draw_kvm_combos(kshark_cpp_argv *argv_c,
 		   plugin_ctx->vm_exit_id,
 		   draw_action);
 }
-
-using namespace KsWidgetsLib;
 
 /**
  * @brief Create KsCPUCheckBoxWidget.
@@ -222,8 +222,7 @@ void KsComboPlotDialog::_applyPress()
 		allCombos.append(combo);
 		++nPlots;
 	}
-	qInfo() << cbVec;
-	qInfo() << nPlots << allCombos;
+
 	emit apply(nPlots, allCombos);
 }
 
@@ -305,8 +304,7 @@ static void showDialog(KsMainWindow *ks)
 
 	histo = ks->graphPtr()->glPtr()->model()->histo();
 	hMap = getVCPUPids(kshark_ctx, histo);
-	qInfo() << kshark_ctx->n_streams;
-	qInfo() << hMap;
+
 	if (kshark_ctx->n_streams < 2 || hMap.count() != 1) {
 		QString err("Data from one Host and at least one Guest is required.");
 		QMessageBox msgBox;
