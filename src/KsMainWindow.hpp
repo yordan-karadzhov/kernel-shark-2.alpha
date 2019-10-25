@@ -223,7 +223,7 @@ private:
 
 	void _offset();
 
-	void _setColorPhase(int);
+	void _setGraphColorPhase(int);
 
 	void _changeScreenMode();
 

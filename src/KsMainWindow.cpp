@@ -301,7 +301,14 @@ void KsMainWindow::_createActions()
 	_colorPhaseSlider.setFixedWidth(FONT_WIDTH * 15);
 
 	connect(&_colorPhaseSlider,	&QSlider::valueChanged,
-		this,			&KsMainWindow::_setColorPhase);
+		this,			&KsMainWindow::_setGraphColorPhase);
+
+	/*
+	 * Updating the colors of the table can be slow. Do this only when
+	 * the slider is released.
+	 */
+	connect(&_colorPhaseSlider,	&QSlider::sliderReleased,
+		&_view,			&KsTraceViewer::loadColors);
 
 	_colSlider.setLayout(new QHBoxLayout);
 	_colSlider.layout()->addWidget(new QLabel("Color scheme", this));
@@ -1053,7 +1060,7 @@ void KsMainWindow::_offset()
 	connect(dialog, &KsTimeOffsetDialog::apply, lamApplyOffset);
 }
 
-void KsMainWindow::_setColorPhase(int f)
+void KsMainWindow::_setGraphColorPhase(int f)
 {
 	KsPlot::Color::setRainbowFrequency(f / 100.);
 	_graph.glPtr()->loadColors();

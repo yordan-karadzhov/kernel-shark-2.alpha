@@ -174,8 +174,8 @@ void KsTraceViewer::setMarkerSM(KsDualMarkerSM *m)
 	QString styleSheetA, styleSheetB;
 
 	_mState = m;
-	_model.setColors(_mState->markerA()._color,
-			 _mState->markerB()._color);
+	_model.setMarkerColors(_mState->markerA()._color,
+			       _mState->markerB()._color);
 
 	/*
 	 * Assign a property to State A of the Dual marker state machine. When

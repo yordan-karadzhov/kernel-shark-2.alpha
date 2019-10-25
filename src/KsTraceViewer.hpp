@@ -74,6 +74,11 @@ public:
 
 	void update(KsDataStore *data);
 
+	void loadColors()
+	{
+		_model.loadColors();
+	}
+
 signals:
 	/** Signal emitted when new row is selected. */
 	void select(size_t);

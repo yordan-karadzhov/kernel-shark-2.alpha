@@ -364,10 +364,9 @@ void KsViewModel::fill(KsDataStore *data)
 
 	_data = data->rows();
 	_nRows = data->size();
+	_streamColors = KsPlot::getStreamColorTable();
 
 	endInsertRows();
-
-	_streamColors = KsPlot::getStreamColorTable();
 }
 
 /** @brief Select a row in the table.
@@ -406,6 +405,14 @@ void KsViewModel::update(KsDataStore *data)
 	 */
 	reset();
 	fill(data);
+}
+
+/** Update the color scheme used by the model. */
+void KsViewModel::loadColors()
+{
+	beginResetModel();
+	_streamColors = KsPlot::getStreamColorTable();
+	endResetModel();
 }
 
 /** @brief Search the content of the table for a data satisfying an abstract

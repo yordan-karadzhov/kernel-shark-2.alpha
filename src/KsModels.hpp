@@ -46,7 +46,7 @@ public:
 	explicit KsViewModel(QObject *parent = nullptr);
 
 	/** Set the colors of the two markers. */
-	void setColors(const QColor &colA, const QColor &colB) {
+	void setMarkerColors(const QColor &colA, const QColor &colB) {
 		_colorMarkA = colA;
 		_colorMarkB = colB;
 	};
@@ -92,7 +92,9 @@ public:
 		      search_condition_func cond,
 		      QList<size_t> *matchList);
 
-	void	updateHeader();
+	void updateHeader();
+
+	void loadColors();
 
 	bool singleStream() const {return _singleStream;}
 
