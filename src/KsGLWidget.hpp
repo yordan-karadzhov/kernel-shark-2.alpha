@@ -77,8 +77,6 @@ public:
 
 	void reset();
 
-	bool isEmpty() const;
-
 	/** Reprocess all graphs. */
 	void update() {resizeGL(width(), height());}
 
@@ -134,24 +132,31 @@ public:
 		if (it != _streamPlots.end())
 			return it.value()._taskList.count() +
 			       it.value()._cpuList.count();
-
 		return 0;
 	}
 
-	/** Get the total number of graphs for all Data stream. */
+	/**
+	 * Get the total number of graphs for all Data stream. The Combo plots
+	 * are not counted.
+	 */
 	int totGraphCount() const
 	{
 		int count(0);
-
 		for (auto const &s: _streamPlots)
 			count += s._taskList.count() +
 				 s._cpuList.count();
-
-		return count + comboGraphCount();
+		return count;
 	}
 
 	/** Get the number of VirtCombo plots. */
 	int comboGraphCount() const {return _comboPlots.count();}
+
+	/** Check if the widget is empty (not showing anything). */
+	bool isEmpty() const
+	{
+		return !_data || !_data->size() ||
+		       (!totGraphCount() && !comboGraphCount());
+	}
 
 	/** Get the height of the widget. */
 	int height() const

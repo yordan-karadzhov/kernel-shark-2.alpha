@@ -148,11 +148,6 @@ void KsGLWidget::reset()
 	_model.reset();
 }
 
-/** Check if the widget is empty (not showing anything). */
-bool KsGLWidget::isEmpty() const {
-	return !_data || !_data->size() || !totGraphCount();
-}
-
 /** Reimplemented event handler used to receive mouse press events. */
 void KsGLWidget::mousePressEvent(QMouseEvent *event)
 {
