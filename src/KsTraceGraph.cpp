@@ -523,10 +523,6 @@ void KsTraceGraph::updateGeom()
 		dwWidth -=
 			qApp->style()->pixelMetric(QStyle::PM_ScrollBarExtent);
 
-	/*
-	 * Set the height of the Draw window according to the number of
-	 * plotted graphs.
-	 */
 	_glWindow.resize(dwWidth, _glWindow.height());
 
 	/* Set the minimum height of the Graph widget. */
