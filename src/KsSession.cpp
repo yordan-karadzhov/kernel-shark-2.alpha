@@ -430,7 +430,8 @@ void KsSession::saveGraphs(kshark_context *kshark_ctx,
 void KsSession::loadGraphs(kshark_context *kshark_ctx,
 			   KsTraceGraph &graphs)
 {
-	int sd, *streamIds = kshark_all_streams(kshark_ctx);
+	int nCombos, sd, *streamIds = kshark_all_streams(kshark_ctx);
+	QVector<int> combos;
 
 	for (int i = 0; i < kshark_ctx->n_streams; ++i) {
 		sd = streamIds[i];
@@ -439,10 +440,9 @@ void KsSession::loadGraphs(kshark_context *kshark_ctx,
 	}
 
 	free(streamIds);
-	QVector<QVector<int>> combos = _getComboPlots();
-	for (auto const &cp: combos) {
-		graphs.comboReDraw(0, cp);
-	}
+
+	combos = _getComboPlots(&nCombos);
+	graphs.comboReDraw(nCombos, combos);
 }
 
 void KsSession::_savePlots(int sd, KsGLWidget *glw, bool cpu)
@@ -587,12 +587,12 @@ QVector<int> KsSession::_getTaskPlots(int sd)
 	return _getPlots(sd, false);
 }
 
-QVector<QVector<int>> KsSession::_getComboPlots()
+QVector<int> KsSession::_getComboPlots(int *n)
 {
 	kshark_config_doc *combos = kshark_config_alloc(KS_CONFIG_JSON);
 	int nPlots, sdHost, sdGuest, pidHost, vcpu;
 	json_object *jplots, *jcombo;
-	QVector<QVector<int>> vec;
+	QVector<int> vec;
 
 	if (!kshark_config_doc_get(_config, "ComboPlots", combos))
 		return vec;
@@ -602,7 +602,7 @@ QVector<QVector<int>> KsSession::_getComboPlots()
 		if (json_object_get_type(jplots) != json_type_array)
 			return vec;
 
-		nPlots = json_object_array_length(jplots);
+		*n = nPlots = json_object_array_length(jplots);
 		for (int i = 0; i < nPlots; ++i) {
 			jcombo = json_object_array_get_idx(jplots, i);
 			if (json_object_get_type(jcombo) != json_type_array)

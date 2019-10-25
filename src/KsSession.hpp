@@ -109,7 +109,7 @@ private:
 
 	void _saveComboPlots(KsGLWidget *glw);
 
-	QVector<QVector<int>> _getComboPlots();
+	QVector<int> _getComboPlots(int *nCombos);
 
 	bool _getMarker(const char* name, size_t *pos);
 
