@@ -190,7 +190,7 @@ struct kshark_plugin_list {
 	/** List of all Data streams for which the plugin has to be applied. */
 	struct kshark_stream_list	*streams;
 
-	/** Plugin Event handler. */
+	/** Plugin's object file handler. */
 	void				*handle;
 
 	/** Callback function for initialization of the plugin. */

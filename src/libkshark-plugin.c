@@ -36,7 +36,7 @@ gui_event_handler_alloc(int event_id, int sd,
 
 	if (!handler) {
 		fprintf(stderr,
-			"failed to allocate memory for gui eventhandler");
+			"failed to allocate memory for event handler");
 		return NULL;
 	}
 
