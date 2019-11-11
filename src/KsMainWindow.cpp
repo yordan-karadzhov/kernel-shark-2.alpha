@@ -26,6 +26,7 @@
 
 // KernelShark
 #include "libkshark.h"
+#include "libkshark-input.h"
 #include "libkshark-tepdata.h"
 #include "KsCmakeDef.hpp"
 #include "KsWidgetsLib.hpp"
@@ -182,6 +183,15 @@ KsMainWindow::~KsMainWindow()
 
 	if (kshark_instance(&kshark_ctx))
 		kshark_free(kshark_ctx);
+}
+
+void  KsMainWindow::registerInput(const QString &input)
+{
+	kshark_context *kshark_ctx(nullptr);
+	std::string tmp = input.toStdString();
+
+	if (kshark_instance(&kshark_ctx))
+		kshark_register_input(kshark_ctx, tmp.c_str());
 }
 
 /**

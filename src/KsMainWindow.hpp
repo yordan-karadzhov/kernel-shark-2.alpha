@@ -64,6 +64,8 @@ public:
 		_plugins.unregisterPlugin(plugin);
 	}
 
+	void registerInput(const QString &input);
+
 	void resizeEvent(QResizeEvent* event);
 
 	/** Set the Full Screen mode. */

@@ -240,6 +240,9 @@ struct kshark_context {
 	/** List of Plugins. */
 	struct kshark_plugin_list	*plugins;
 
+	/** List of user data inputs. */
+	struct kshark_input_list	*inputs;
+
 	/** List of Plugin Event handlers. */
 	struct kshark_event_handler	*event_handlers;
 };

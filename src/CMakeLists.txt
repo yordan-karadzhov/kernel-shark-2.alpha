@@ -13,6 +13,7 @@ add_library(kshark SHARED libkshark.c
                           libkshark-tepdata.c
                           libkshark-hash.c
                           libkshark-model.c
+                          libkshark-input.c
                           libkshark-plugin.c
                           libkshark-configio.c
                           libkshark-collection.c)

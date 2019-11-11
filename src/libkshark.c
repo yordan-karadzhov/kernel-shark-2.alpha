@@ -21,6 +21,7 @@
 // KernelShark
 #include "libkshark.h"
 #include "libkshark-plugin.h"
+#include "libkshark-input.h"
 #include "libkshark-tepdata.h"
 
 static struct kshark_context *kshark_context_handler = NULL;
@@ -39,6 +40,7 @@ static bool kshark_default_context(struct kshark_context **context)
 	kshark_ctx->event_handlers = NULL;
 	kshark_ctx->collections = NULL;
 	kshark_ctx->plugins = NULL;
+	kshark_ctx->inputs = NULL;
 
 	kshark_ctx->filter_mask = 0x0;
 
@@ -214,12 +216,26 @@ static bool is_tep(const char *filename)
 	return ext && strcmp(ext, ".dat") == 0;
 }
 
-static void set_format(struct kshark_data_stream *stream, const char *filename)
+static void set_format(struct kshark_context *kshark_ctx,
+		       struct kshark_data_stream *stream,
+		       const char *filename)
 {
-	if (is_tep(filename))
+	struct kshark_input_list *input;
+
+	stream->format = KS_INVALIDE_DATA;
+
+	if (is_tep(filename)) {
 		stream->format = KS_TEP_DATA;
-	else
-		stream->format = KS_INVALIDE_DATA;
+		return;
+	}
+
+	for (input = kshark_ctx->inputs; input; input = input->next) {
+		stream->format = input->check_data(filename);
+		if (stream->format != KS_INVALIDE_DATA) {
+			input->format = stream->format;
+			return;
+		}
+	}
 }
 
 /**
@@ -233,20 +249,28 @@ static void set_format(struct kshark_data_stream *stream, const char *filename)
  */
 int kshark_stream_open(struct kshark_data_stream *stream, const char *file)
 {
-	if (!stream)
+	struct kshark_context *kshark_ctx = NULL;
+	struct kshark_input_list *input;
+
+	if (!stream || !kshark_instance(&kshark_ctx))
 		return -EFAULT;
 
 	if (pthread_mutex_init(&stream->input_mutex, NULL) != 0)
 		return -EAGAIN;
 
 	stream->file = strdup(file);
-	set_format(stream, file);
+	set_format(kshark_ctx, stream, file);
 
 	switch (stream->format) {
 	case KS_TEP_DATA:
 		return kshark_tep_init_input(stream, file);
 
 	default:
+		for (input = kshark_ctx->inputs; input; input = input->next) {
+			if (stream->format == input->format)
+				return input->init(stream);
+		}
+
 		return -ENODATA;
 	}
 }
@@ -278,7 +302,10 @@ int *kshark_all_streams(struct kshark_context *kshark_ctx)
 
 static void kshark_stream_close(struct kshark_data_stream *stream)
 {
-	if (!stream)
+	struct kshark_context *kshark_ctx = NULL;
+	struct kshark_input_list *input;
+
+	if (!stream || !kshark_instance(&kshark_ctx))
 		return;
 
 	/*
@@ -298,6 +325,11 @@ static void kshark_stream_close(struct kshark_data_stream *stream)
 		break;
 
 	default:
+		for (input = kshark_ctx->inputs; input; input = input->next) {
+			if (stream->format == input->format)
+				input->close(stream);
+		}
+
 		break;
 	}
 
@@ -382,6 +414,8 @@ void kshark_free(struct kshark_context *kshark_ctx)
 		kshark_free_plugin_list(kshark_ctx->plugins);
 		kshark_free_event_handler_list(kshark_ctx->event_handlers);
 	}
+
+	kshark_free_input_list(kshark_ctx->inputs);
 
 	if (kshark_ctx == kshark_context_handler)
 		kshark_context_handler = NULL;
