@@ -64,7 +64,7 @@ public:
 		_plugins.unregisterPlugin(plugin);
 	}
 
-	void registerInput(const QString &input);
+	void registerInput(const QStringList &inputs);
 
 	void resizeEvent(QResizeEvent* event);
 
@@ -148,6 +148,8 @@ private:
 
 	QAction		_addPluginsAction;
 
+	QAction		_addUserInputAction;
+
 	QAction		_captureAction;
 
 	QAction		_addOffcetAction;
@@ -220,6 +222,8 @@ private:
 	void _pluginUpdate(int sd, QVector<int> pluginStates);
 
 	void _pluginAdd();
+
+	void _inputAdd();
 
 	void _record();
 

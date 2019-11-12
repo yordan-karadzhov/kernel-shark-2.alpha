@@ -65,6 +65,7 @@ KsMainWindow::KsMainWindow(QWidget *parent)
   _taskSelectAction("Tasks", this),
   _managePluginsAction("Manage plugins", this),
   _addPluginsAction("Add plugins", this),
+  _addUserInputAction("Add User input", this),
   _captureAction("Record", this),
   _addOffcetAction("Add Time Offset", this),
   _colorAction(this),
@@ -185,13 +186,18 @@ KsMainWindow::~KsMainWindow()
 		kshark_free(kshark_ctx);
 }
 
-void  KsMainWindow::registerInput(const QString &input)
+void  KsMainWindow::registerInput(const QStringList &inputs)
 {
 	kshark_context *kshark_ctx(nullptr);
-	std::string tmp = input.toStdString();
+	std::string tmp;
 
-	if (kshark_instance(&kshark_ctx))
+	if (!kshark_instance(&kshark_ctx))
+		return;
+
+	for (auto const &i: inputs) {
+		tmp = i.toStdString();
 		kshark_register_input(kshark_ctx, tmp.c_str());
+	}
 }
 
 /**
@@ -294,6 +300,11 @@ void KsMainWindow::_createActions()
 
 	connect(&_addPluginsAction,	&QAction::triggered,
 		this,			&KsMainWindow::_pluginAdd);
+
+	_addUserInputAction.setIcon(QIcon::fromTheme("applications-engineering"));
+	_addUserInputAction.setStatusTip("Add User input");
+	connect(&_addUserInputAction,	&QAction::triggered,
+		this,			&KsMainWindow::_inputAdd);
 
 	_captureAction.setIcon(QIcon::fromTheme("media-record"));
 	_captureAction.setShortcut(tr("Ctrl+R"));
@@ -413,6 +424,7 @@ void KsMainWindow::_createMenus()
 	tools = menuBar()->addMenu("Tools");
 	tools->addAction(&_managePluginsAction);
 	tools->addAction(&_addPluginsAction);
+	tools->addAction(&_addUserInputAction);
 	tools->addAction(&_captureAction);
 	tools->addAction(&_addOffcetAction);
 	tools->addSeparator();
@@ -1052,6 +1064,18 @@ void KsMainWindow::_pluginAdd()
 		_plugins.addPlugins(fileNames);
 
 	_graph.update(&_data);
+}
+
+void KsMainWindow::_inputAdd()
+{
+	QStringList fileNames;
+
+	fileNames = KsUtils::getFiles(this, "Add User data input for KernelShark",
+				      "Data input plugins (*.so);;",
+				      _lastPluginFilePath);
+
+	if (!fileNames.isEmpty())
+		registerInput(fileNames);
 }
 
 void KsMainWindow::_record()

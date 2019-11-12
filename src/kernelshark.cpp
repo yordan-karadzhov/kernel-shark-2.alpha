@@ -66,7 +66,7 @@ int main(int argc, char **argv)
 			break;
 
 		case 'd':
-			ks.registerInput(QString(optarg));
+			ks.registerInput(QStringList(optarg));
 			break;
 
 		case 'u':
