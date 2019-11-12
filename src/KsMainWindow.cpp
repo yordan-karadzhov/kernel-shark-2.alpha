@@ -566,6 +566,7 @@ void KsMainWindow::_updateSession()
 		return;
 
 	_session.saveVisModel(_graph.glPtr()->model()->histo());
+	_session.saveDataInputs(kshark_ctx);
 	_session.saveDataStreams(kshark_ctx);
 	_session.saveGraphs(kshark_ctx, _graph);
 	_session.saveDualMarker(&_mState);
@@ -1312,6 +1313,7 @@ void KsMainWindow::loadSession(const QString &fileName)
 	pb.setValue(20);
 
 	auto lamLoadJob = [&] (KsDataStore *d) {
+		_session.loadDataInputs(kshark_ctx);
 		_session.loadDataStreams(kshark_ctx, &_data, &_plugins);
 		loadDone = true;
 	};

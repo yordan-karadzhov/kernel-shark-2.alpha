@@ -22,8 +22,8 @@
 
 // KernelShark
 #include "libkshark.h"
+#include "libkshark-input.h"
 #include "libkshark-model.h"
-#include "libkshark-plugin.h"
 #include "libkshark-tepdata.h"
 
 static struct json_object *kshark_json_config_alloc(const char *type)
@@ -484,7 +484,8 @@ static bool kshark_trace_file_to_json(const char *file,
  * @param format: Input location for the Configuration format identifier.
  *		  Currently only Json format is supported.
  *
- * @returns True on success, otherwise False.
+ * @returns kshark_config_doc instance on success, otherwise NULL. Use
+ *	    free() to free the object.
  */
 struct kshark_config_doc *
 kshark_export_trace_file(const char *file,
@@ -509,18 +510,26 @@ kshark_export_trace_file(const char *file,
 	}
 }
 
-static bool kshark_trace_file_from_json(const char **file,
+static bool kshark_trace_file_from_json(const char **file, const char *type,
 					struct json_object *jobj)
 {
 	struct json_object *jfile_name, *jtime;
 	const char *file_str;
 	struct stat st;
+	char *header;
 	int64_t time;
+	bool type_OK = true;
 
 	if (!jobj)
 		return false;
 
-	if (!kshark_json_type_check(jobj, "kshark.config.data") ||
+	if (type) {
+		type_OK = false;
+		if (asprintf(&header, "kshark.config.%s", type) >= 0)
+			type_OK = kshark_json_type_check(jobj, header);
+	}
+
+	if (!type_OK ||
 	    !json_object_object_get_ex(jobj, "file", &jfile_name) ||
 	    !json_object_object_get_ex(jobj, "time", &jtime)) {
 		fprintf(stderr,
@@ -566,7 +575,7 @@ int kshark_import_trace_file(struct kshark_context *kshark_ctx,
 	int sd = -1;
 	switch (conf->format) {
 	case KS_CONFIG_JSON:
-		if (kshark_trace_file_from_json(&file, conf->conf_doc))
+		if (kshark_trace_file_from_json(&file, "data", conf->conf_doc))
 			sd = kshark_open(kshark_ctx, file);
 
 		break;
@@ -578,6 +587,109 @@ int kshark_import_trace_file(struct kshark_context *kshark_ctx,
 	}
 
 	return sd;
+}
+
+static bool kshark_inputs_to_json(struct kshark_context *kshark_ctx,
+				  struct json_object *jobj)
+{
+	json_object *jfile, *jlist = json_object_new_array();
+	struct kshark_input_list *input;
+
+	for (input = kshark_ctx->inputs; input; input = input->next) {
+		jfile = json_object_new_object();
+		kshark_trace_file_to_json(input->file, jfile);
+		json_object_array_add(jlist, jfile);
+	}
+
+	json_object_object_add(jobj, "obj. files", jlist);
+	return true;
+}
+
+/**
+ * @brief Record the current list of registered user inputs into a
+ *	  Configuration document.
+ *
+ * @param kshark_ctx: Input location for session context pointer.
+ * @param conf: Input location for the kshark_config_doc instance. Currently
+ *		only Json format is supported.
+ *
+ * @returns kshark_config_doc instance on success, otherwise NULL. Use
+ *	    free() to free the object.
+ */
+struct kshark_config_doc *
+kshark_export_user_inputs(struct kshark_context *kshark_ctx,
+			  enum kshark_config_formats format)
+{
+	struct kshark_config_doc *conf =
+		kshark_config_new("kshark.config.inputs", KS_CONFIG_JSON);
+
+	if (!conf)
+		return NULL;
+
+	switch (format) {
+	case KS_CONFIG_JSON:
+		kshark_inputs_to_json(kshark_ctx, conf->conf_doc);
+		return conf;
+
+	default:
+		fprintf(stderr, "Document format %d not supported\n",
+			conf->format);
+		return NULL;
+	}
+}
+
+static bool kshark_inputs_from_json(struct kshark_context *kshark_ctx,
+				    struct json_object *jobj)
+{
+	struct json_object *jlist, *jfile;
+	const char *file;
+	int i, n_inputs;
+
+	if (!kshark_ctx || !jobj)
+		return false;
+
+	if (!kshark_json_type_check(jobj, "kshark.config.inputs") ||
+	    !json_object_object_get_ex(jobj, "obj. files", &jlist) ||
+	    json_object_get_type(jlist) != json_type_array)
+		goto fail;
+
+	n_inputs = json_object_array_length(jlist);
+	for (i = 0; i < n_inputs; ++i) {
+		jfile = json_object_array_get_idx(jlist, i);
+		if (kshark_trace_file_from_json(&file, NULL, jfile))
+			kshark_register_input(kshark_ctx, file);
+	}
+
+	return true;
+
+ fail:
+	return false;
+}
+
+/**
+ * @brief Load the list of registered user inputs from a Configuration
+ *	  document.
+ *
+ * @param kshark_ctx: Input location for session context pointer.
+ * @param conf: Input location for the kshark_config_doc instance. Currently
+ *		only Json format is supported.
+ *
+ * @returns True, if user inputs have been loaded. If the configuration
+ *	    document contains no data or in a case of an error, the function
+ *	    returns False.
+ */
+bool kshark_import_user_inputs(struct kshark_context *kshark_ctx,
+			       struct kshark_config_doc *conf)
+{
+	switch (conf->format) {
+	case KS_CONFIG_JSON:
+		return kshark_inputs_from_json(kshark_ctx, conf->conf_doc);
+
+	default:
+		fprintf(stderr, "Document format %d not supported\n",
+			conf->format);
+		return false;
+	}
 }
 
 static bool kshark_model_to_json(struct kshark_trace_histo *histo,
@@ -618,14 +730,13 @@ static bool kshark_model_to_json(struct kshark_trace_histo *histo,
 /**
  * @brief Record the current configuration of the Vis. model into a
  *	  Configuration document.
- * Load the configuration of the Vis. model from a Configuration
- *	  document.
  *
  * @param histo: Input location for the Vis. model descriptor.
  * @param format: Input location for the kshark_config_doc instance. Currently
  *		  only Json format is supported.
  *
- * @returns True on success, otherwise False.
+ * @returns kshark_config_doc instance on success, otherwise NULL. Use
+ *	    free() to free the object.
  */
 struct kshark_config_doc *
 kshark_export_model(struct kshark_trace_histo *histo,
@@ -1816,22 +1927,32 @@ int kshark_import_dstream(struct kshark_context *kshark_ctx,
 
 	file_conf = kshark_config_alloc(KS_CONFIG_JSON);
 	filter_conf = kshark_config_alloc(KS_CONFIG_JSON);
+	if (!file_conf || !file_conf) {
+		fprintf(stderr, "Failed to allocate memory for Json document.\n");
+		goto free;
+	}
 
 	if (file_conf && filter_conf &&
 	    kshark_config_doc_get(conf, "data", file_conf) &&
 	    kshark_config_doc_get(conf, "filters", filter_conf)) {
 		sd = kshark_import_trace_file(kshark_ctx, file_conf);
-		if (sd >= 0) {
-			kshark_import_calib_array(kshark_ctx, sd, conf);
-			ret = kshark_import_all_filters(kshark_ctx, sd,
-							filter_conf);
-			if (!ret) {
-				kshark_close(kshark_ctx, sd);
-				return -EFAULT;
-			}
+		if (sd < 0) {
+			fprintf(stderr, "Failed to import data file form Json document.\n");
+			goto free;
+		}
+
+		kshark_import_calib_array(kshark_ctx, sd, conf);
+		ret = kshark_import_all_filters(kshark_ctx, sd,
+						filter_conf);
+		if (!ret) {
+			fprintf(stderr, "Failed to import filters form Json document.\n");
+			kshark_close(kshark_ctx, sd);
+			sd = -EFAULT;
+			goto free;
 		}
 	}
 
+ free:
 	free(file_conf);
 	free(filter_conf);
 
@@ -1923,9 +2044,7 @@ kshark_import_all_dstreams_from_json(struct kshark_context *kshark_ctx,
 	for (i = 0; i < length; ++i) {
 		jstream = json_object_array_get_idx(jall_streams, i);
 		dstream_conf.conf_doc = jstream;
-		printf("stream import\n");
 		sd = kshark_import_dstream(kshark_ctx, &dstream_conf);
-		printf("stream %i imported\n", sd);
 
 		if (sd < 0)
 			return -EFAULT;
@@ -1960,7 +2079,7 @@ ssize_t kshark_import_all_dstreams(struct kshark_context *kshark_ctx,
 	default:
 		fprintf(stderr, "Document format %d not supported\n",
 			conf->format);
-		return -EFAULT;;
+		return -EFAULT;
 	}
 }
 

@@ -891,6 +891,13 @@ int kshark_import_trace_file(struct kshark_context *kshark_ctx,
 			     struct kshark_config_doc *conf);
 
 struct kshark_config_doc *
+kshark_export_user_inputs(struct kshark_context *kshark_ctx,
+			  enum kshark_config_formats format);
+
+bool kshark_import_user_inputs(struct kshark_context *kshark_ctx,
+			       struct kshark_config_doc *conf);
+
+struct kshark_config_doc *
 kshark_export_model(struct kshark_trace_histo *histo,
 		     enum kshark_config_formats format);
 

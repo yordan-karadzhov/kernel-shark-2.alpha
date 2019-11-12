@@ -12,6 +12,7 @@
 // KernelShark
 #include "libkshark.h"
 #include "libkshark-tepdata.h"
+#include "libkshark-input.h"
 #include "KsSession.hpp"
 #include "KsMainWindow.hpp"
 
@@ -826,4 +827,21 @@ void KsSession::loadPlugins(kshark_context *kshark_ctx, KsPluginManager *pm)
 // 	}
 // 
 // 	pm->updatePlugins(pluginIds);
+}
+
+void KsSession::saveDataInputs(kshark_context *kshark_ctx)
+{
+	kshark_config_doc *inputsConf =
+	kshark_export_user_inputs(kshark_ctx, KS_CONFIG_JSON);
+	kshark_config_doc_add(_config, "Inputs", inputsConf);
+}
+
+void KsSession::loadDataInputs(kshark_context *kshark_ctx)
+{
+	kshark_config_doc *inputConf = kshark_config_alloc(KS_CONFIG_JSON);
+
+	if (!kshark_config_doc_get(_config, "Inputs", inputConf))
+		return;
+
+	kshark_import_user_inputs(kshark_ctx, inputConf);
 }
