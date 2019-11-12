@@ -117,6 +117,9 @@ enum kshark_data_format {
 
 	/** Ftrace data. */
 	KS_TEP_DATA,
+
+	/** VMware SchedTrace data. */
+	KS_VMW_ST_DATA,
 };
 
 /**
