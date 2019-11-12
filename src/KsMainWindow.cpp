@@ -409,6 +409,24 @@ void KsMainWindow::_createMenus()
 	tools->addAction(&_colorAction);
 	tools->addAction(&_fullScreenModeAction);
 
+	/*
+	 * Enable the "Add Time Offset" menu only in the case of multiple
+	 * data streams.
+	 */
+	auto lamEnableOffcetAction = [this] () {
+		kshark_context *kshark_ctx(nullptr);
+
+		if (!kshark_instance(&kshark_ctx))
+			return;
+
+		if (kshark_ctx->n_streams > 1)
+			_addOffcetAction.setEnabled(true);
+		else
+			_addOffcetAction.setEnabled(false);
+	};
+
+	connect(tools,	&QMenu::aboutToShow, lamEnableOffcetAction);
+
 	/* Help menu */
 	help = menuBar()->addMenu("Help");
 	help->addAction(&_aboutAction);
