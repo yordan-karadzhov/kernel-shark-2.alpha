@@ -1244,7 +1244,7 @@ void kshark_set_clock_offset(struct kshark_context *kshark_ctx,
 ssize_t kshark_load_all_entries(struct kshark_context *kshark_ctx,
 				struct kshark_entry ***data_rows)
 {
-	size_t data_size = 0;;
+	size_t data_size = 0;
 	int i, *stream_ids, sd;
 
 	if (!kshark_ctx->n_streams)

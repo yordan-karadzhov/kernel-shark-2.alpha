@@ -49,7 +49,7 @@ void KsTableView::scrollTo(const QModelIndex &index, ScrollHint hint)
 
 /** Create a default (empty) Trace viewer widget. */
 KsTraceViewer::KsTraceViewer(QWidget *parent)
-: QWidget(parent),
+: KsWidgetsLib::KsDataWidget(parent),
   _view(this),
   _model(this),
   _proxyModel(this),

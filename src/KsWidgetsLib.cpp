@@ -9,6 +9,9 @@
  *  @brief   Defines small widgets and dialogues used by the KernelShark GUI.
  */
 
+// C
+#include <unistd.h>
+
 // KernelShark
 #include "libkshark-tepdata.h"
 #include "KsCmakeDef.hpp"
@@ -27,11 +30,12 @@ namespace KsWidgetsLib
 KsProgressBar::KsProgressBar(QString message, QWidget *parent)
 : QWidget(parent),
   _sb(this),
-  _pb(&_sb) {
-	resize(KS_PROGBAR_WIDTH, KS_PROGBAR_HEIGHT);
+  _pb(&_sb),
+  _notDone(false) {
 	setWindowTitle("KernelShark");
 	setLayout(new QVBoxLayout);
-
+	setFixedHeight(KS_PROGBAR_HEIGHT);
+	setFixedWidth(KS_PROGBAR_WIDTH);
 	_pb.setOrientation(Qt::Horizontal);
 	_pb.setTextVisible(false);
 	_pb.setRange(0, KS_PROGRESS_BAR_MAX);
@@ -47,6 +51,12 @@ KsProgressBar::KsProgressBar(QString message, QWidget *parent)
 	show();
 }
 
+KsProgressBar::~KsProgressBar()
+{
+	_notDone = false;
+	usleep(10000);
+}
+
 /** @brief Set the state of the progressbar.
  *
  * @param i: A value ranging from 0 to KS_PROGRESS_BAR_MAX.
@@ -54,6 +64,66 @@ KsProgressBar::KsProgressBar(QString message, QWidget *parent)
 void KsProgressBar::setValue(int i) {
 	_pb.setValue(i);
 	QApplication::processEvents();
+}
+
+void KsProgressBar::workInProgress()
+{
+	int progress, inc;
+	bool inv = false;
+
+	progress = inc = 5;
+	_notDone = true;
+	while (_notDone) {
+		if (progress > KS_PROGRESS_BAR_MAX ||
+		    progress <= 0) {
+			inc = -inc;
+			inv = !inv;
+			_pb.setInvertedAppearance(inv);
+		}
+
+		setValue(progress);
+		progress += inc;
+		usleep(30000);
+	}
+}
+
+KsWorkInProgress::KsWorkInProgress(QWidget *parent)
+: QWidget(parent),
+  _icon(this),
+  _message("work in progress", this)
+{
+	QIcon statusIcon = QIcon::fromTheme("dialog-warning");
+	_icon.setPixmap(statusIcon.pixmap(.8 * FONT_HEIGHT));
+}
+
+void KsWorkInProgress::show(KsDataWork w)
+{
+	if (_works.isEmpty()) {
+		_icon.show();
+		_message.show();
+		QApplication::processEvents();
+	}
+
+	_works.insert(w);
+}
+
+void KsWorkInProgress::hide(KsDataWork w)
+{
+	_works.remove(w);
+
+	if (_works.isEmpty()) {
+		_icon.hide();
+		_message.hide();
+		QApplication::processEvents();
+	}
+}
+
+void KsWorkInProgress::addToStatusBar(QStatusBar *sb)
+{
+	sb->addPermanentWidget(&_icon);
+	sb->addPermanentWidget(&_message);
+	_icon.hide();
+	_message.hide();
 }
 
 /**

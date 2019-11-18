@@ -19,6 +19,7 @@
 // KernelShark
 #include "KsTraceViewer.hpp"
 #include "KsTraceGraph.hpp"
+#include "KsWidgetsLib.hpp"
 #include "KsPlugins.hpp"
 #include "KsSession.hpp"
 #include "KsUtils.hpp"
@@ -93,7 +94,6 @@ private:
 	/** Widget for graphical visualization of the trace data. */
 	KsTraceGraph	_graph;
 
-private:
 	/** Dual Marker State Machine. */
 	KsDualMarkerSM	_mState;
 
@@ -176,6 +176,9 @@ private:
 	QSettings	_settings;
 
 	QMetaObject::Connection		_captureErrorConnection;
+
+	// Status bar.
+	KsWidgetsLib::KsWorkInProgress	_workInProgress;
 
 	void _load(const QString& fileName, bool append);
 

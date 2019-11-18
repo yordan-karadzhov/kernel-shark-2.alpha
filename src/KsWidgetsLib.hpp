@@ -37,7 +37,13 @@ class KsProgressBar : public QWidget
 public:
 	KsProgressBar(QString message, QWidget *parent = nullptr);
 
+	virtual ~KsProgressBar();
+
 	void setValue(int i);
+
+	void workInProgress();
+
+	bool		_notDone;
 };
 
 /** Defines the progress bar's maximum value. */
@@ -48,6 +54,73 @@ public:
 
 /** The width of the KsProgressBar widget. */
 #define KS_PROGBAR_WIDTH  (FONT_WIDTH * 50)
+
+enum class KsDataWork
+{
+	EditPlotList,
+	ZoomIn,
+	QuickZoomIn,
+	ZoomOut,
+	QuickZoomOut,
+	ScrollLeft,
+	ScrollRight,
+	JumpTo,
+	GraphUpdateGeom,
+};
+
+inline uint qHash(KsDataWork key, uint seed)
+{
+	return ::qHash(static_cast<uint>(key), seed);
+}
+
+class KsWorkInProgress : public QWidget
+{
+public:
+	explicit KsWorkInProgress(QWidget *parent = nullptr);
+
+	void show(KsDataWork w);
+
+	void hide(KsDataWork w);
+
+	void addToStatusBar(QStatusBar *sb);
+
+private:
+	QLabel	_icon, _message;
+
+	QSet<KsDataWork>	_works;
+};
+
+class KsDataWidget : public QWidget
+{
+public:
+	explicit KsDataWidget(QWidget *parent = nullptr)
+	: QWidget(parent), _workInProgress(nullptr) {}
+
+	const KsWorkInProgress *getWipPtr(KsWorkInProgress *wip) const
+	{
+		return _workInProgress;
+	}
+
+	void setWipPtr(KsWorkInProgress *wip)
+	{
+		_workInProgress = wip;
+	}
+
+	void startOfWork(KsDataWork w)
+	{
+		if (_workInProgress)
+			_workInProgress->show(w);
+	}
+
+	void endOfWork(KsDataWork w)
+	{
+		if (_workInProgress)
+			_workInProgress->hide(w);
+	}
+
+private:
+	KsWorkInProgress	*_workInProgress;
+};
 
 /**
  * The KsMessageDialog class provides a widget showing a message and having

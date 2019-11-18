@@ -20,6 +20,7 @@
 #include "KsModels.hpp"
 #include "KsSearchFSM.hpp"
 #include "KsDualMarker.hpp"
+#include "KsWidgetsLib.hpp"
 
 /**
  * Table View class, needed in order to reimplemented the handler for mouse
@@ -42,7 +43,7 @@ public:
  * The KsTraceViewer class provides a widget for browsing in the trace data
  * shown in a text form.
  */
-class KsTraceViewer : public QWidget
+class KsTraceViewer : public KsWidgetsLib::KsDataWidget
 {
 	Q_OBJECT
 public:
@@ -100,7 +101,7 @@ private:
 
 	KsTableView	_view;
 
-	KsViewModel		_model;
+	KsViewModel	_model;
 
 	KsFilterProxyModel	_proxyModel;
 

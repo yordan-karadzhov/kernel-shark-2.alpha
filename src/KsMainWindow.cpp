@@ -29,7 +29,6 @@
 #include "libkshark-input.h"
 #include "libkshark-tepdata.h"
 #include "KsCmakeDef.hpp"
-#include "KsWidgetsLib.hpp"
 #include "KsMainWindow.hpp"
 #include "KsAdvFilteringDialog.hpp"
 
@@ -76,7 +75,8 @@ KsMainWindow::KsMainWindow(QWidget *parent)
   _contentsAction("Contents", this),
   _bugReportAction("Report a bug", this),
   _deselectShortcut(this),
-  _settings("kernelshark.org", "Kernel Shark") // organization , application
+  _settings("kernelshark.org", "Kernel Shark"), // organization , application
+  _workInProgress(this)
 {
 	setWindowTitle("Kernel Shark");
 	_createActions();
@@ -90,6 +90,23 @@ KsMainWindow::KsMainWindow(QWidget *parent)
 	_splitter.addWidget(&_graph);
 	_splitter.addWidget(&_view);
 	setCentralWidget(&_splitter);
+
+	/*
+	 * Add Status bar. First of all remove the bottom margins of the table
+	 * so that the Status bar can nicely stick to it.
+	 */
+	QMargins m = _view.layout()->contentsMargins();
+	m.setBottom(0);
+	_view.layout()->setContentsMargins(m);
+
+	/* Now create the Status bar and the "Work In Progress" Widget. */
+	QStatusBar *sb = statusBar();
+	sb->setFixedHeight(1.2 * FONT_HEIGHT);
+	_workInProgress.addToStatusBar(sb);
+
+	_graph.setWipPtr(&_workInProgress);
+	_view.setWipPtr(&_workInProgress);
+
 	connect(&_splitter,	&QSplitter::splitterMoved,
 		this,		&KsMainWindow::_splitterMoved);
 

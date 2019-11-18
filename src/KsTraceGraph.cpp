@@ -15,9 +15,11 @@
 #include "KsTraceGraph.hpp"
 #include "KsQuickContextMenu.hpp"
 
+using namespace KsWidgetsLib;
+
 /** Create a default (empty) Trace graph widget. */
 KsTraceGraph::KsTraceGraph(QWidget *parent)
-: QWidget(parent),
+: KsWidgetsLib::KsDataWidget(parent),
   _pointerBar(this),
   _navigationBar(this),
   _zoomInButton("+", this),
@@ -188,18 +190,28 @@ void KsTraceGraph::_selfUpdate()
 
 void KsTraceGraph::_zoomIn()
 {
-	_updateGraphs(GraphActions::ZoomIn);
+	KsDataWork action = KsDataWork::ZoomIn;
+
+	startOfWork(action);
+	_updateGraphs(action);
+	endOfWork(action);
 }
 
 void KsTraceGraph::_zoomOut()
 {
-	_updateGraphs(GraphActions::ZoomOut);
+	KsDataWork action = KsDataWork::ZoomOut;
+
+	startOfWork(action);
+	_updateGraphs(action);
+	endOfWork(action);
 }
 
 void KsTraceGraph::_quickZoomIn()
 {
 	if (_glWindow.isEmpty())
 		return;
+
+	startOfWork(KsDataWork::QuickZoomIn);
 
 	/* Bin size will be 100 ns. */
 	_glWindow.model()->quickZoomIn(100);
@@ -212,6 +224,8 @@ void KsTraceGraph::_quickZoomIn()
 		uint64_t ts = _mState->activeMarker()._ts;
 		_glWindow.model()->jumpTo(ts);
 	}
+
+	endOfWork(KsDataWork::QuickZoomIn);
 }
 
 void KsTraceGraph::_quickZoomOut()
@@ -219,17 +233,27 @@ void KsTraceGraph::_quickZoomOut()
 	if (_glWindow.isEmpty())
 		return;
 
+	startOfWork(KsDataWork::QuickZoomOut);
 	_glWindow.model()->quickZoomOut();
+	endOfWork(KsDataWork::QuickZoomOut);
 }
 
 void KsTraceGraph::_scrollLeft()
 {
-	_updateGraphs(GraphActions::ScrollLeft);
+	KsDataWork action = KsDataWork::ScrollLeft;
+
+	startOfWork(action);
+	_updateGraphs(action);
+	endOfWork(action);
 }
 
 void KsTraceGraph::_scrollRight()
 {
-	_updateGraphs(GraphActions::ScrollRight);
+	KsDataWork action = KsDataWork::ScrollRight;
+
+	startOfWork(action);
+	_updateGraphs(action);
+	endOfWork(action);
 }
 
 void KsTraceGraph::_stopUpdating()
@@ -376,10 +400,12 @@ void KsTraceGraph::_markerReDraw()
  */
 void KsTraceGraph::cpuReDraw(int sd, QVector<int> v)
 {
+	startOfWork(KsDataWork::EditPlotList);
 	if (_glWindow._streamPlots.contains(sd))
 		_glWindow._streamPlots[sd]._cpuList = v;
 
 	_selfUpdate();
+	endOfWork(KsDataWork::EditPlotList);
 }
 
 /**
@@ -390,10 +416,12 @@ void KsTraceGraph::cpuReDraw(int sd, QVector<int> v)
  */
 void KsTraceGraph::taskReDraw(int sd, QVector<int> v)
 {
+	startOfWork(KsDataWork::EditPlotList);
 	if (_glWindow._streamPlots.contains(sd))
 		_glWindow._streamPlots[sd]._taskList = v;
 
 	_selfUpdate();
+	endOfWork(KsDataWork::EditPlotList);
 }
 
 /**
@@ -405,6 +433,8 @@ void KsTraceGraph::taskReDraw(int sd, QVector<int> v)
 void KsTraceGraph::comboReDraw(int nCombos, QVector<int> v)
 {
 	KsVirtComboPlot combo;
+
+	startOfWork(KsDataWork::EditPlotList);
 
 	_glWindow._comboPlots.clear();
 
@@ -419,48 +449,57 @@ void KsTraceGraph::comboReDraw(int nCombos, QVector<int> v)
 	}
 
 	_selfUpdate();
+	endOfWork(KsDataWork::EditPlotList);
 }
 
 /** Add (and plot) a CPU graph to the existing list of CPU graphs. */
 void KsTraceGraph::addCPUPlot(int sd, int cpu)
 {
+	startOfWork(KsDataWork::EditPlotList);
 	if (_glWindow._streamPlots[sd]._cpuList.contains(cpu))
 		return;
 
 	_glWindow._streamPlots[sd]._cpuList.append(cpu);
 	qSort(_glWindow._streamPlots[sd]._cpuList);
 	_selfUpdate();
+	endOfWork(KsDataWork::EditPlotList);
 }
 
 /** Add (and plot) a Task graph to the existing list of Task graphs. */
 void KsTraceGraph::addTaskPlot(int sd, int pid)
 {
+	startOfWork(KsDataWork::EditPlotList);
 	if (_glWindow._streamPlots[sd]._taskList.contains(pid))
 		return;
 
 	_glWindow._streamPlots[sd]._taskList.append(pid);
 	qSort(_glWindow._streamPlots[sd]._taskList);
 	_selfUpdate();
+	endOfWork(KsDataWork::EditPlotList);
 }
 
 /** Remove a CPU graph from the existing list of CPU graphs. */
 void KsTraceGraph::removeCPUPlot(int sd, int cpu)
 {
+	startOfWork(KsDataWork::EditPlotList);
 	if (!_glWindow._streamPlots[sd]._cpuList.contains(cpu))
 		return;
 
 	_glWindow._streamPlots[sd]._cpuList.removeAll(cpu);
 	_selfUpdate();
+	endOfWork(KsDataWork::EditPlotList);
 }
 
 /** Remove a Task graph from the existing list of Task graphs. */
 void KsTraceGraph::removeTaskPlot(int sd, int pid)
 {
+	startOfWork(KsDataWork::EditPlotList);
 	if (!_glWindow._streamPlots[sd]._taskList.contains(pid))
 		return;
 
 	_glWindow._streamPlots[sd]._taskList.removeAll(pid);
 	_selfUpdate();
+	endOfWork(KsDataWork::EditPlotList);
 }
 
 /** Update the content of all graphs. */
@@ -581,7 +620,7 @@ bool KsTraceGraph::eventFilter(QObject* obj, QEvent* evt)
 	return QWidget::eventFilter(obj, evt);
 }
 
-void KsTraceGraph::_updateGraphs(GraphActions action)
+void KsTraceGraph::_updateGraphs(KsDataWork action)
 {
 	double k;
 	int bin;
@@ -597,9 +636,10 @@ void KsTraceGraph::_updateGraphs(GraphActions action)
 
 	/* Initialize the zooming factor with a small value. */
 	k = .01;
+
 	while (_keyPressed) {
 		switch (action) {
-		case GraphActions::ZoomIn:
+		case KsDataWork::ZoomIn:
 			if (_mState->activeMarker()._isSet &&
 			    _mState->activeMarker().isVisible()) {
 				/*
@@ -618,7 +658,7 @@ void KsTraceGraph::_updateGraphs(GraphActions action)
 
 			break;
 
-		case GraphActions::ZoomOut:
+		case KsDataWork::ZoomOut:
 			if (_mState->activeMarker()._isSet &&
 			    _mState->activeMarker().isVisible()) {
 				/*
@@ -637,13 +677,16 @@ void KsTraceGraph::_updateGraphs(GraphActions action)
 
 			break;
 
-		case GraphActions::ScrollLeft:
+		case KsDataWork::ScrollLeft:
 			_glWindow.model()->shiftBackward(10);
 			break;
 
-		case GraphActions::ScrollRight:
+		case KsDataWork::ScrollRight:
 			_glWindow.model()->shiftForward(10);
 			break;
+
+		default:
+			return;
 		}
 
 		/*

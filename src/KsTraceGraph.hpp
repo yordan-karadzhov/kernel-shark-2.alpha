@@ -13,6 +13,7 @@
 
 // KernelShark
 #include "KsGLWidget.hpp"
+#include "KsWidgetsLib.hpp"
 
 /**
  * Scroll Area class, needed in order to reimplemented the handler for mouse
@@ -35,7 +36,7 @@ public:
  * The KsTraceViewer class provides a widget for interactive visualization of
  * trace data shown as time-series.
  */
-class KsTraceGraph : public QWidget
+class KsTraceGraph : public KsWidgetsLib::KsDataWidget
 {
 	Q_OBJECT
 public:
@@ -105,14 +106,7 @@ private:
 
 	void _markerReDraw();
 
-	enum class GraphActions {
-		ZoomIn,
-		ZoomOut,
-		ScrollLeft,
-		ScrollRight
-	};
-
-	void _updateGraphs(GraphActions action);
+	void _updateGraphs(KsWidgetsLib::KsDataWork action);
 
 	void _onCustomContextMenu(const QPoint &point);
 
