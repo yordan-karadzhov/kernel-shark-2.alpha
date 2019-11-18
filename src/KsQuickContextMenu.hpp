@@ -91,6 +91,8 @@ private:
 
 	size_t		_row;
 
+	QWidgetAction	_rawTime;
+
 	QCheckBox	*_graphSyncCBox, *_listSyncCBox;
 
 	QAction _hideTaskAction, _showTaskAction;

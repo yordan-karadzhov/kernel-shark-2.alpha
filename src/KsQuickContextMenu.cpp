@@ -50,6 +50,7 @@ KsQuickContextMenu::KsQuickContextMenu(KsDualMarkerSM *dm,
 : KsQuickMarkerMenu(dm, parent),
   _data(data),
   _row(row),
+  _rawTime(this),
   _graphSyncCBox(nullptr),
   _listSyncCBox(nullptr),
   _hideTaskAction(this),
@@ -65,17 +66,23 @@ KsQuickContextMenu::KsQuickContextMenu(KsDualMarkerSM *dm,
   _clearAllFilters(this)
 {
 	typedef void (KsQuickContextMenu::*mfp)();
-	QString taskName, parentName, descr;
+	QString time, taskName, parentName, descr;
+	kshark_entry *entry = _data->rows()[_row];
 	KsTraceGraph *graphs;
 	int pid, cpu, sd;
 
 	if (!parent || !_data)
 		return;
 
-	taskName = kshark_get_task(_data->rows()[_row]);
-	pid = kshark_get_pid(_data->rows()[_row]);
-	cpu = _data->rows()[_row]->cpu;
-	sd = _data->rows()[_row]->stream_id;
+	addSection("Raw time:");
+	time = QString("    %1 [ns]\n").arg(entry->ts);
+	_rawTime.setDefaultWidget(new QLabel(time));
+	addAction(&_rawTime);
+
+	taskName = kshark_get_task(entry);
+	pid = kshark_get_pid(entry);
+	cpu = entry->cpu;
+	sd = entry->stream_id;
 
 	auto lamAddAction = [this, &descr] (QAction *action, mfp mf) {
 		action->setText(descr);
@@ -105,12 +112,12 @@ KsQuickContextMenu::KsQuickContextMenu(KsDualMarkerSM *dm,
 	lamAddAction(&_hideTaskAction, &KsQuickContextMenu::_hideTask);
 
 	descr = "Show event [";
-	descr += kshark_get_event_name(_data->rows()[_row]);
+	descr += kshark_get_event_name(entry);
 	descr += "] only";
 	lamAddAction(&_showEventAction, &KsQuickContextMenu::_showEvent);
 
 	descr = "Hide event [";
-	descr += kshark_get_event_name(_data->rows()[_row]);
+	descr += kshark_get_event_name(entry);
 	descr += "]";
 	lamAddAction(&_hideEventAction, &KsQuickContextMenu::_hideEvent);
 
@@ -119,7 +126,7 @@ KsQuickContextMenu::KsQuickContextMenu(KsDualMarkerSM *dm,
 		lamAddAction(&_showCPUAction, &KsQuickContextMenu::_showCPU);
 	}
 
-	descr = QString("Hide CPU [%1]").arg(_data->rows()[_row]->cpu);
+	descr = QString("Hide CPU [%1]").arg(entry->cpu);
 	lamAddAction(&_hideCPUAction, &KsQuickContextMenu::_hideCPU);
 
 	descr = "Clear all filters";
