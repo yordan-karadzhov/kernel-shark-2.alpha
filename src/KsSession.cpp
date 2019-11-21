@@ -19,8 +19,7 @@
 /** Create a KsSession object. */
 KsSession::KsSession()
 {
-	_config = kshark_config_new("kshark.config.session",
-				    KS_CONFIG_JSON);
+	_config = kshark_session_config_new(KS_CONFIG_JSON);
 }
 
 /** Destroy a KsSession object. */
@@ -595,6 +594,7 @@ QVector<int> KsSession::_getComboPlots(int *n)
 	json_object *jplots, *jcombo;
 	QVector<int> vec;
 
+	*n = 0;
 	if (!kshark_config_doc_get(_config, "ComboPlots", combos))
 		return vec;
 

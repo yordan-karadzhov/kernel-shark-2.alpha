@@ -49,7 +49,7 @@ list(APPEND PLUGIN_LIST "missed_events default") # This plugin will be loaded by
 BUILD_GUI_PLUGIN(NAME kvm_combo
                  MOC KVMCombo.hpp
                  SOURCE kvm_combo.c KVMCombo.cpp)
-list(APPEND PLUGIN_LIST "kvm_combo default") # This plugin will be loaded by default
+list(APPEND PLUGIN_LIST "kvm_combo") # This plugin is not loaded by default
 
 install(TARGETS sched_events missed_events kvm_combo
         LIBRARY DESTINATION ${KS_PLUGIN_INSTALL_PREFIX})

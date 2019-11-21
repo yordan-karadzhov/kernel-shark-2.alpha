@@ -33,6 +33,8 @@ if (_DEVEL)
                     "${_INSTALL_PREFIX}/lib/${KS_APP_NAME}/libkshark.so")
 
     install(FILES "${KS_DIR}/src/libkshark.h"
+                  "${KS_DIR}/src/libkshark-plugin.h"
+                  "${KS_DIR}/src/libkshark-input.h"
             DESTINATION ${KS_INCLUDS_DESTINATION})
 
 endif (_DEVEL)

@@ -378,6 +378,19 @@ kshark_filter_config_new(enum kshark_config_formats format)
 }
 
 /**
+ * @brief Create an empty Session Configuration document. The type description
+ *	  is set to "kshark.config.filter".
+ *
+ * @returns kshark_config_doc instance on success, otherwise NULL. Use
+ *	    kshark_free_config_doc() to free the object.
+ */
+struct kshark_config_doc *
+kshark_session_config_new(enum kshark_config_formats format)
+{
+	return kshark_config_new("kshark.config.session", format);
+}
+
+/**
  * @brief Create an empty Text Configuration document. The Text Configuration
  *	  documents do not use type descriptions.
  *
@@ -858,7 +871,8 @@ static bool kshark_event_filter_to_json(struct kshark_data_stream *stream,
 
 	for (i = 0; i < filter->count; ++i) {
 		for (evt = 0; evt < stream->n_events; ++evt) {
-			name_str = kshark_event_from_id(stream, ids[i]);
+			name_str = kshark_event_from_id(stream->stream_id,
+							ids[i]);
 			if (name_str) {
 				jevent = json_object_new_object();
 				jname = json_object_new_string(name_str);
@@ -1177,7 +1191,7 @@ static bool kshark_adv_filters_to_json(struct kshark_data_stream *stream,
 			continue;
 
 		jevent = json_object_new_object();
-		jname = json_object_new_string(kshark_event_from_id(stream,
+		jname = json_object_new_string(kshark_event_from_id(stream->stream_id,
 								    events[i]));
 
 		jfilter = json_object_new_string(filter_str);
@@ -1531,7 +1545,7 @@ bool kshark_export_calib_array(struct kshark_context *kshark_ctx, int sd,
 			       struct kshark_config_doc **conf)
 {
 	if (!*conf)
-		*conf = kshark_filter_config_new(KS_CONFIG_JSON);
+		*conf = kshark_stream_config_new(KS_CONFIG_JSON);
 
 	if (!*conf)
 		return false;
@@ -2006,7 +2020,7 @@ bool kshark_export_all_dstreams(struct kshark_context *kshark_ctx,
 				struct kshark_config_doc **conf)
 {
 	if (!*conf)
-		*conf = kshark_filter_config_new(KS_CONFIG_JSON);
+		*conf = kshark_session_config_new(KS_CONFIG_JSON);
 
 	if (!*conf)
 		return false;

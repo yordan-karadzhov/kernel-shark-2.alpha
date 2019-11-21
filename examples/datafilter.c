@@ -48,7 +48,7 @@ int main(int argc, char **argv)
 	stream = kshark_get_data_stream(kshark_ctx, sd);
 	for (i = 0; i < n_tasks; ++i) {
 		char *task_str =
-			kshark_comm_from_pid(kshark_ctx->stream[sd], pids[i]);
+			kshark_comm_from_pid(sd, pids[i]);
 
 		if (strcmp(task_str, "trace-cmd") == 0)
 			kshark_filter_add_id(kshark_ctx, sd,
@@ -90,7 +90,7 @@ int main(int argc, char **argv)
 	evt_ids = kshark_get_all_event_ids(kshark_ctx->stream[sd]);
 	for (i = 0; i < n_evts; ++i) {
 		char *event_str =
-			kshark_event_from_id(kshark_ctx->stream[sd], evt_ids[i]);
+			kshark_event_from_id(sd, evt_ids[i]);
 		if (strstr(event_str, "sched/"))
 			kshark_filter_add_id(kshark_ctx, sd,
 					     KS_SHOW_EVENT_FILTER,

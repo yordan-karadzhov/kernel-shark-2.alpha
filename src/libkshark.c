@@ -454,12 +454,21 @@ ssize_t kshark_get_task_pids(struct kshark_context *kshark_ctx, int sd,
  * @param stream: Input location for a Trace data stream pointer.
  * @param pid: Process Id of the command/task.
  */
-char *kshark_comm_from_pid(struct kshark_data_stream *stream, int pid)
+char *kshark_comm_from_pid(int sd, int pid)
 {
+	struct kshark_context *kshark_ctx = NULL;
+	struct kshark_data_stream *stream;
 	struct kshark_entry e;
 
-	e.pid = pid;
+	if (!kshark_instance(&kshark_ctx))
+		return NULL;
+
+	stream = kshark_get_data_stream(kshark_ctx, sd);
+	if (!stream)
+		return NULL;
+
 	e.visible = KS_PLUGIN_UNTOUCHED_MASK;
+	e.pid = pid;
 
 	return stream->interface.get_task(stream, &e);
 }
@@ -470,12 +479,21 @@ char *kshark_comm_from_pid(struct kshark_data_stream *stream, int pid)
  * @param stream: Input location for a Trace data stream pointer.
  * @param event_id: The unique Id of the event type.
  */
-char *kshark_event_from_id(struct kshark_data_stream *stream, int event_id)
+char *kshark_event_from_id(int sd, int event_id)
 {
+	struct kshark_context *kshark_ctx = NULL;
+	struct kshark_data_stream *stream;
 	struct kshark_entry e;
 
-	e.event_id = event_id;
+	if (!kshark_instance(&kshark_ctx))
+		return NULL;
+
+	stream = kshark_get_data_stream(kshark_ctx, sd);
+	if (!stream)
+		return NULL;
+
 	e.visible = KS_PLUGIN_UNTOUCHED_MASK;
+	e.event_id = event_id;
 
 	return stream->interface.get_event_name(stream, &e);
 }

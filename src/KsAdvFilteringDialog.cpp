@@ -177,7 +177,8 @@ void KsAdvFilteringDialog::_setSystemCombo(kshark_context *kshark_ctx)
 	eventIds = kshark_get_all_event_ids(stream);
 
 	auto lamGetSysName = [&stream] (int eventId) {
-		QStringList name = KsUtils::getTepEvtName(stream, eventId);
+		QStringList name = KsUtils::getTepEvtName(stream->stream_id,
+							  eventId);
 		return name[0];
 	};
 
@@ -252,7 +253,7 @@ void KsAdvFilteringDialog::_getFilters(kshark_context *kshark_ctx)
 	stream = _getCurrentStream(kshark_ctx);
 	eventIds = kshark_get_all_event_ids(stream);
 	for (int i = 0; i < stream->n_events; ++i) {
-		eventName = KsUtils::getTepEvtName(stream, eventIds[i]);
+		eventName = KsUtils::getTepEvtName(stream->stream_id, eventIds[i]);
 		filterStr = kshark_tep_filter_make_string(stream, eventIds[i]);
 		if (!filterStr)
 			continue;
@@ -335,7 +336,7 @@ void KsAdvFilteringDialog::_systemChanged(const QString &sysName)
 	stream = _getCurrentStream(kshark_ctx);
 	eventIds = kshark_get_all_event_ids(stream);
 	for (i = 0; i < stream->n_events; ++i) {
-		name = KsUtils::getTepEvtName(stream, eventIds[i]);
+		name = KsUtils::getTepEvtName(stream->stream_id, eventIds[i]);
 		if (sysName == name[0])
 			evtsList << name[1];
 	}
@@ -388,7 +389,7 @@ void KsAdvFilteringDialog::_eventChanged(const QString &evtName)
 	stream = _getCurrentStream(kshark_ctx);
 	eventIds = kshark_get_all_event_ids(stream);
 	for (int i = 0; i < stream->n_events; ++i) {
-		eventName = KsUtils::getTepEvtName(stream, eventIds[i]);
+		eventName = KsUtils::getTepEvtName(stream->stream_id, eventIds[i]);
 		if (sysName == eventName[0] && evtName == eventName[1]) {
 			fieldList = _getEventFormatFields(eventIds[i]);
 			_fieldComboBox.addItems(fieldList);

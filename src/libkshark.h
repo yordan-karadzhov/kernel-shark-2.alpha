@@ -98,10 +98,15 @@ typedef const int (*stream_get_int_func) (struct kshark_data_stream *,
 
 /** A function type to be used by the method interface of the data stream. */
 typedef int (*stream_find_id_func) (struct kshark_data_stream *,
-				     const char *);
+				    const char *);
 
 /** A function type to be used by the method interface of the data stream. */
 typedef int *(*stream_get_ids_func) (struct kshark_data_stream *);
+
+typedef const int (*stream_read_event_field) (struct kshark_data_stream *,
+					      const struct kshark_entry *,
+					      const char *,
+					      unsigned long long *);
 
 struct kshark_context;
 
@@ -109,6 +114,15 @@ struct kshark_context;
 typedef ssize_t (*load_entries_func) (struct kshark_data_stream *,
 				      struct kshark_context *,
 				      struct kshark_entry ***);
+
+/** A function type to be used by the method interface of the data stream. */
+typedef ssize_t (*load_matrix_func) (struct kshark_data_stream *,
+				     struct kshark_context *,
+				     uint64_t **,
+				     uint16_t **,
+				     uint64_t **,
+				     uint16_t **,
+				     int **);
 
 /** Data format identifier. */
 enum kshark_data_format {
@@ -156,8 +170,14 @@ struct kshark_data_stream_interface {
 	/** Method used to dump the entry's content to string. */
 	stream_get_str_func	dump_entry;
 
-	/** Method used to load the data. */
+	/** Method used to access the value of an event's data field. */
+	stream_read_event_field	read_event_field;
+
+	/** Method used to load the data in the form of entries. */
 	load_entries_func	load_entries;
+
+	/** Method used to load the data in matrix form. */
+	load_matrix_func	load_matrix;
 
 	/** Generic data handle. */
 	void			*handle;
@@ -258,7 +278,7 @@ int kshark_stream_open(struct kshark_data_stream *stream, const char *file);
 
 int kshark_add_stream(struct kshark_context *kshark_ctx);
 
-inline static struct kshark_data_stream *
+static inline struct kshark_data_stream *
 kshark_get_data_stream(struct kshark_context *kshark_ctx, int sd)
 {
 	if (sd >= 0 && sd < KS_MAX_NUM_STREAMS)
@@ -267,14 +287,25 @@ kshark_get_data_stream(struct kshark_context *kshark_ctx, int sd)
 	return NULL;
 }
 
+static inline struct kshark_data_stream *
+kshark_get_stream_from_entry(const struct kshark_entry *entry)
+{
+	struct kshark_context *kshark_ctx = NULL;
+
+	if (!kshark_instance(&kshark_ctx))
+		return NULL;
+
+	return kshark_get_data_stream(kshark_ctx, entry->stream_id);
+}
+
 int *kshark_all_streams(struct kshark_context *kshark_ctx);
 
 ssize_t kshark_get_task_pids(struct kshark_context *kshark_ctx, int sd,
 			     int **pids);
 
-char *kshark_comm_from_pid(struct kshark_data_stream *stream, int pid);
+char *kshark_comm_from_pid(int sd, int pid);
 
-char *kshark_event_from_id(struct kshark_data_stream *stream, int event_id);
+char *kshark_event_from_id(int sd, int event_id);
 
 void kshark_convert_nano(uint64_t time, uint64_t *sec, uint64_t *usec);
 
@@ -286,25 +317,23 @@ void kshark_free(struct kshark_context *kshark_ctx);
 
 static inline int kshark_get_pid(const struct kshark_entry *entry)
 {
-	struct kshark_context *kshark_ctx = NULL;
-	struct kshark_data_stream *stream;
+	struct kshark_data_stream *stream =
+		kshark_get_stream_from_entry(entry);
 
-	if (!kshark_instance(&kshark_ctx))
+	if (!stream)
 		return -1;
 
-	stream = kshark_ctx->stream[entry->stream_id];
 	return stream->interface.get_pid(stream, entry);
 }
 
 static inline int kshark_get_event_id(const struct kshark_entry *entry)
 {
-	struct kshark_context *kshark_ctx = NULL;
-	struct kshark_data_stream *stream;
+	struct kshark_data_stream *stream =
+		kshark_get_stream_from_entry(entry);
 
-	if (!kshark_instance(&kshark_ctx))
+	if (!stream)
 		return -1;
 
-	stream = kshark_ctx->stream[entry->stream_id];
 	return stream->interface.get_event_id(stream, entry);
 }
 
@@ -315,61 +344,69 @@ static inline int *kshark_get_all_event_ids(struct kshark_data_stream *stream)
 
 static inline char *kshark_get_event_name(const struct kshark_entry *entry)
 {
-	struct kshark_context *kshark_ctx = NULL;
-	struct kshark_data_stream *stream;
+	struct kshark_data_stream *stream =
+		kshark_get_stream_from_entry(entry);
 
-	if (!kshark_instance(&kshark_ctx))
+	if (!stream)
 		return NULL;
 
-	stream = kshark_ctx->stream[entry->stream_id];
 	return stream->interface.get_event_name(stream, entry);
 }
 
 static inline char *kshark_get_task(const struct kshark_entry *entry)
 {
-	struct kshark_context *kshark_ctx = NULL;
-	struct kshark_data_stream *stream;
+	struct kshark_data_stream *stream =
+		kshark_get_stream_from_entry(entry);
 
-	if (!kshark_instance(&kshark_ctx))
+	if (!stream)
 		return NULL;
 
-	stream = kshark_ctx->stream[entry->stream_id];
 	return stream->interface.get_task(stream, entry);
 }
 
 static inline char *kshark_get_latency(const struct kshark_entry *entry)
 {
-	struct kshark_context *kshark_ctx = NULL;
-	struct kshark_data_stream *stream;
+	struct kshark_data_stream *stream =
+		kshark_get_stream_from_entry(entry);
 
-	if (!kshark_instance(&kshark_ctx))
+	if (!stream)
 		return NULL;
 
-	stream = kshark_ctx->stream[entry->stream_id];
 	return stream->interface.get_latency(stream, entry);
 }
 
 static inline char *kshark_get_info(const struct kshark_entry *entry)
 {
-	struct kshark_context *kshark_ctx = NULL;
-	struct kshark_data_stream *stream;
+	struct kshark_data_stream *stream =
+		kshark_get_stream_from_entry(entry);
 
-	if (!kshark_instance(&kshark_ctx))
+	if (!stream)
 		return NULL;
 
-	stream = kshark_ctx->stream[entry->stream_id];
 	return stream->interface.get_info(stream, entry);
+}
+
+static inline int kshark_read_event_field(const struct kshark_entry *entry,
+					  const char* field,
+					  unsigned long long *val)
+{
+	struct kshark_data_stream *stream =
+		kshark_get_stream_from_entry(entry);
+
+	if (!stream)
+		return -1;
+
+	return stream->interface.read_event_field(stream, entry, field, val);
 }
 
 static inline char *kshark_dump_entry(const struct kshark_entry *entry)
 {
-	struct kshark_context *kshark_ctx = NULL;
-	struct kshark_data_stream *stream;
+	struct kshark_data_stream *stream =
+		kshark_get_stream_from_entry(entry);
 
-	if (!kshark_instance(&kshark_ctx))
+	if (!stream)
 		return NULL;
 
-	stream = kshark_ctx->stream[entry->stream_id];
 	return stream->interface.dump_entry(stream, entry);
 }
 
@@ -871,6 +908,9 @@ kshark_stream_config_new(enum kshark_config_formats);
 
 struct kshark_config_doc *
 kshark_filter_config_new(enum kshark_config_formats);
+
+struct kshark_config_doc *
+kshark_session_config_new(enum kshark_config_formats format);
 
 struct kshark_config_doc *kshark_string_config_alloc(void);
 

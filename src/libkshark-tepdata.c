@@ -47,6 +47,15 @@ struct tepdata_handle {
 	 * the event.
 	 */
 	struct tep_event_filter	*advanced_event_filter;
+
+	/** The unique Id of the sched_switch_event event. */
+	int sched_switch_event_id;
+
+	/** Pointer to the sched_switch_next_field format descriptor. */
+	struct tep_format_field	*sched_switch_next_field;
+
+	/** Pointer to the sched_switch_comm_field format descriptor. */
+	struct tep_format_field	*sched_switch_comm_field;
 };
 
 struct tep_handle *kshark_get_tep(struct kshark_data_stream *stream)
@@ -69,6 +78,24 @@ get_adv_filter(struct kshark_data_stream *stream)
 {
 	struct tepdata_handle *tep_handle = stream->interface.handle;
 	return tep_handle->advanced_event_filter;
+}
+
+static int get_sched_switch_id(struct kshark_data_stream *stream)
+{
+	struct tepdata_handle *tep_handle = stream->interface.handle;
+	return tep_handle->sched_switch_event_id;
+}
+
+static struct tep_format_field *get_sched_next(struct kshark_data_stream *stream)
+{
+	struct tepdata_handle *tep_handle = stream->interface.handle;
+	return tep_handle->sched_switch_next_field;
+}
+
+static struct tep_format_field *get_sched_comm(struct kshark_data_stream *stream)
+{
+	struct tepdata_handle *tep_handle = stream->interface.handle;
+	return tep_handle->sched_switch_comm_field;
 }
 
 static void set_entry_values(struct kshark_data_stream *stream,
@@ -145,6 +172,33 @@ struct rec_list {
 	};
 };
 
+static int plugin_get_next_pid(struct kshark_data_stream *stream,
+			       struct tep_record *record)
+{
+	unsigned long long val;
+	int ret;
+
+	ret = tep_read_number_field(get_sched_next(stream),
+				    record->data, &val);
+
+	return ret ? : val;
+}
+
+static void plugin_register_command(struct kshark_data_stream *stream,
+				    struct tep_record *record,
+				    int pid)
+{
+	struct tep_format_field *comm_field = get_sched_comm(stream);
+	const char *comm = record->data + comm_field->offset;
+	/*
+	 * TODO: The retrieve of the name of the command above needs to be
+	 * implemented as a wrapper function in libtracevent.
+	 */
+
+	if (!tep_is_pid_registered(kshark_get_tep(stream), pid))
+			tep_register_comm(kshark_get_tep(stream), comm, pid);
+}
+
 /**
  * rec_type defines what type of rec_list is being used.
  */
@@ -183,7 +237,7 @@ static ssize_t get_records(struct kshark_context *kshark_ctx,
 	struct rec_list *temp_rec;
 	struct tep_record *rec;
 	ssize_t count, total = 0;
-	int pid, cpu;
+	int pid, next_pid, cpu;
 
 	cpu_list = calloc(stream->n_cpus, sizeof(*cpu_list));
 	if (!cpu_list)
@@ -236,6 +290,14 @@ static ssize_t get_records(struct kshark_context *kshark_ctx,
 
 				entry = &temp_rec->entry;
 				set_entry_values(stream, rec, entry);
+
+				if(entry->event_id == get_sched_switch_id(stream)) {
+					next_pid = plugin_get_next_pid(stream, rec);
+					if (next_pid >= 0)
+						plugin_register_command(stream, rec,
+									next_pid);
+				}
+
 				entry->stream_id = stream->stream_id;
 
 				if (stream->calib && stream->calib_array)
@@ -367,6 +429,143 @@ ssize_t kshark_load_tep_entries(struct kshark_data_stream *stream,
 	free_rec_list(rec_list, stream->n_cpus, type);
 	*data_rows = rows;
 
+	return total;
+
+ fail_free:
+	free_rec_list(rec_list, stream->n_cpus, type);
+
+ fail:
+	fprintf(stderr, "Failed to allocate memory during data loading.\n");
+	return -ENOMEM;
+}
+
+static inline void free_ptr(void *ptr)
+{
+	if (ptr)
+		free(*(void **)ptr);
+}
+
+static bool data_matrix_alloc(size_t n_rows, uint64_t **offset_array,
+					     uint16_t **cpu_array,
+					     uint64_t **ts_array,
+					     uint16_t **pid_array,
+					     int **event_array)
+{
+	if (offset_array) {
+		*offset_array = calloc(n_rows, sizeof(**offset_array));
+		if (!*offset_array)
+			return false;
+	}
+
+	if (cpu_array) {
+		*cpu_array = calloc(n_rows, sizeof(**cpu_array));
+		if (!*cpu_array)
+			goto free_offset;
+	}
+
+	if (ts_array) {
+		*ts_array = calloc(n_rows, sizeof(**ts_array));
+		if (!*ts_array)
+			goto free_cpu;
+	}
+
+	if (pid_array) {
+		*pid_array = calloc(n_rows, sizeof(**pid_array));
+		if (!*pid_array)
+			goto free_ts;
+	}
+
+	if (event_array) {
+		*event_array = calloc(n_rows, sizeof(**event_array));
+		if (!*event_array)
+			goto free_pid;
+	}
+
+	return true;
+
+ free_pid:
+	free_ptr(pid_array);
+ free_ts:
+	free_ptr(ts_array);
+ free_cpu:
+	free_ptr(cpu_array);
+ free_offset:
+	free_ptr(offset_array);
+
+	fprintf(stderr, "Failed to allocate memory during data loading.\n");
+	return false;
+}
+
+/**
+ * @brief Load the content of the trace data file into a table / matrix made
+ *	  of columns / arrays of data. The user is responsible for freeing the
+ *	  elements of the outputted array
+ *
+ * @param kshark_ctx: Input location for the session context pointer.
+ * @param offset_array: Output location for the array of record offsets.
+ * @param cpu_array: Output location for the array of CPU Ids.
+ * @param ts_array: Output location for the array of timestamps.
+ * @param pid_array: Output location for the array of Process Ids.
+ * @param event_array: Output location for the array of Event Ids.
+ *
+ * @returns The size of the outputted arrays in the case of success, or a
+ *	    negative error code on failure.
+ */
+ssize_t kshark_load_tep_matrix(struct kshark_data_stream *stream,
+			       struct kshark_context *kshark_ctx,
+			       uint64_t **offset_array,
+			       uint16_t **cpu_array,
+			       uint64_t **ts_array,
+			       uint16_t **pid_array,
+			       int **event_array)
+{
+	enum rec_type type = REC_ENTRY;
+	struct rec_list **rec_list;
+	ssize_t count, total = 0;
+	bool status;
+
+	total = get_records(kshark_ctx, stream, &rec_list, type);
+	if (total < 0)
+		goto fail;
+
+	status = data_matrix_alloc(total, offset_array,
+					  cpu_array,
+					  ts_array,
+					  pid_array,
+					  event_array);
+	if (!status)
+		goto fail_free;
+
+	for (count = 0; count < total; count++) {
+		int next_cpu;
+
+		next_cpu = pick_next_cpu(rec_list, stream->n_cpus, type);
+		if (next_cpu >= 0) {
+			struct rec_list *rec = rec_list[next_cpu];
+			struct kshark_entry *e = &rec->entry;
+
+			if (offset_array)
+				(*offset_array)[count] = e->offset;
+
+			if (cpu_array)
+				(*cpu_array)[count] = e->cpu;
+
+			if (ts_array)
+				(*ts_array)[count] = e->ts;
+
+			if (pid_array)
+				(*pid_array)[count] = e->pid;
+
+			if (event_array)
+				(*event_array)[count] = e->event_id;
+
+			rec_list[next_cpu] = rec_list[next_cpu]->next;
+			free(rec);
+		}
+	}
+
+	/* There should be no entries left in rec_list. */
+	free_rec_list(rec_list, stream->n_cpus, type);
 	return total;
 
  fail_free:
@@ -815,6 +1014,34 @@ static const int tepdata_find_event_id(struct kshark_data_stream *stream,
 	return event->id;
 }
 
+int tep_read_event_field(struct kshark_data_stream *stream,
+			 const struct kshark_entry *entry,
+			 const char *field,
+			 unsigned long long *val)
+{
+	struct tep_format_field *evt_field;
+	struct tep_record *record;
+	struct tep_event *event;
+	int ret;
+
+	event = tep_find_event(kshark_get_tep(stream), entry->event_id);
+	if (!event)
+		return -EINVAL;
+
+	evt_field = tep_find_any_field(event, field);
+	if (!evt_field)
+		return -EINVAL;
+
+	record = tracecmd_read_at(kshark_get_tep_input(stream), entry->offset, NULL);
+	if (!record)
+		return -EFAULT;
+
+	ret = tep_read_number_field(evt_field, record->data, val);
+	free_record(record);
+
+	return ret;
+}
+
 /** Initialize all methods used by a stream of FTRACE data. */
 static void kshark_tep_init_methods(struct kshark_data_stream *stream)
 {
@@ -827,7 +1054,9 @@ static void kshark_tep_init_methods(struct kshark_data_stream *stream)
 	stream->interface.find_event_id = tepdata_find_event_id;
 	stream->interface.get_all_event_ids = tepdata_get_event_ids;
 	stream->interface.dump_entry = tepdata_dump_entry;
+	stream->interface.read_event_field = tep_read_event_field;
 	stream->interface.load_entries = kshark_load_tep_entries;
+	stream->interface.load_matrix = kshark_load_tep_matrix;
 }
 
 /** Initialize the FTRACE data input (from file). */
@@ -835,6 +1064,7 @@ int kshark_tep_init_input(struct kshark_data_stream *stream,
 			  const char *file)
 {
 	struct tepdata_handle *tep_handle;
+	struct tep_event *event;
 
 	if (!init_thread_seq())
 		return -EEXIST;
@@ -858,6 +1088,19 @@ int kshark_tep_init_input(struct kshark_data_stream *stream,
 	}
 
 	tep_handle->tep = tracecmd_get_pevent(tep_handle->input);
+
+	tep_handle->sched_switch_event_id = -EINVAL;
+	event = tep_find_event_by_name(tep_handle->tep,
+				       "sched", "sched_switch");
+	if (event) {
+		tep_handle->sched_switch_event_id = event->id;
+
+		tep_handle->sched_switch_next_field =
+			tep_find_any_field(event, "next_pid");
+
+		tep_handle->sched_switch_comm_field =
+			tep_find_field(event, "next_comm");
+	}
 
 	stream->n_cpus = tep_get_cpus(tep_handle->tep);
 	stream->n_events = tep_get_events_count(tep_handle->tep);
@@ -1043,55 +1286,6 @@ int kshark_tep_get_event_fields(struct kshark_data_stream *stream,
 		free(buffer[i]);
 
 	return -EFAULT;
-}
-
-/**
- * @brief Get the value of a given field of the trace record.
- *
- * @param entry: The entry accessed with the record.
- * @param field: The name of the field.
- * @param err_val: The value to be returned in the case of an error.
- *
- * @return The value of the field on success, or "err_val" on failure.
- */
-unsigned long long kshark_tep_read_event_field(const struct kshark_entry *entry,
-					       const char *field,
-					       unsigned long long err_val)
-{
-	struct kshark_context *kshark_ctx = NULL;
-	struct tep_format_field *evt_field;
-	struct kshark_data_stream *stream;
-	struct tep_record *record;
-	struct tep_event *event;
-	unsigned long long val;
-	int ret;
-
-	if (!kshark_instance(&kshark_ctx))
-		return err_val;
-
-	stream = kshark_get_data_stream(kshark_ctx, entry->stream_id);
-	if (!stream)
-		return err_val;
-
-	event = tep_find_event(kshark_get_tep(stream), entry->event_id);
-	if (!event)
-		return err_val;
-
-	evt_field = tep_find_any_field(event, field);
-	if (!evt_field)
-		return err_val;
-
-	record = tracecmd_read_at(kshark_get_tep_input(stream), entry->offset, NULL);
-	if (!record)
-		return err_val;
-
-	ret = tep_read_number_field(evt_field, record->data, &val);
-	free_record(record);
-
-	if (ret != 0)
-		return err_val;
-
-	return val;
 }
 
 /** Get an array of available tracer plugins. */

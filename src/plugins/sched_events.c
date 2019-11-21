@@ -196,29 +196,6 @@ static int plugin_get_next_pid(struct tep_record *record, int sd)
 	return ret ? : val;
 }
 
-static void plugin_register_command(struct kshark_context *kshark_ctx,
-				    struct tep_record *record,
-				    int sd, int pid)
-{
-	struct plugin_sched_context *plugin_ctx =
-		plugin_sched_context_handler[sd];
-	struct kshark_data_stream *stream;
-	const char *comm;
-
-	stream = kshark_get_data_stream(kshark_ctx, sd);
-	if (!stream || !plugin_ctx->sched_switch_comm_field)
-		return;
-
-	comm = record->data + plugin_ctx->sched_switch_comm_field->offset;
-	/*
-	 * TODO: The retrieve of the name of the command above needs to be
-	 * implemented as a wrapper function in libtracevent.
-	 */
-
-	if (!tep_is_pid_registered(plugin_ctx->tep, pid))
-			tep_register_comm(plugin_ctx->tep, comm, pid);
-}
-
 static int find_wakeup_pid(struct kshark_context *kshark_ctx,
 			   struct kshark_entry *e,
 			   int sd,
@@ -397,12 +374,9 @@ bool plugin_match_pid(struct kshark_context *kshark_ctx,
 static void plugin_sched_action(struct kshark_context *kshark_ctx, void *rec,
 				struct kshark_entry *entry)
 {
-	int pid = plugin_get_next_pid(rec, entry->stream_id);
-	if (pid >= 0) {
-		entry->pid = pid;
-		plugin_register_command(kshark_ctx, rec,
-					entry->stream_id,
-					entry->pid);
+	int next_pid = plugin_get_next_pid(rec, entry->stream_id);
+	if (next_pid >= 0) {
+		entry->pid = next_pid;
 	}
 }
 

@@ -341,13 +341,9 @@ QStringList splitArguments(QString cmd)
  * @param stream: Input location for a Trace data stream pointer.
  * @param eventId: Identifier of the Event.
  */
-QStringList getTepEvtName(kshark_data_stream *stream, int eventId)
+QStringList getTepEvtName(int sd, int eventId)
 {
-	kshark_entry e;
-
-	e.event_id = eventId;
-	e.visible = KS_PLUGIN_UNTOUCHED_MASK;
-	QString name(stream->interface.get_event_name(stream, &e));
+	QString name(kshark_comm_from_pid(sd, eventId));
 
 	return name.split('/');
 }
@@ -371,7 +367,7 @@ QString taskPlotName(int sd, int pid)
 	if (!stream)
 		return {};
 
-	name = kshark_comm_from_pid(stream, pid);
+	name = kshark_comm_from_pid(sd, pid);
 	name += "-";
 	name += QString("%1").arg(pid);
 

@@ -344,19 +344,10 @@ KsRmTaskPlotMenu::KsRmTaskPlotMenu(KsDualMarkerSM *dm, int sd, int pid,
 				   QWidget *parent)
 : KsRmPlotContextMenu(dm, sd, parent)
 {
-	kshark_context *kshark_ctx(nullptr);
-	kshark_data_stream *stream;
 	QString descr;
 
-	if (!kshark_instance(&kshark_ctx))
-		return;
-
-	stream = kshark_get_data_stream(kshark_ctx, _sd);
-	if (!stream)
-		return;
-
 	descr = "Remove [ ";
-	descr += kshark_comm_from_pid(stream, pid);
+	descr += kshark_comm_from_pid(sd, pid);
 	descr += "-";
 	descr += QString("%1").arg(pid);
 	descr += "] plot";

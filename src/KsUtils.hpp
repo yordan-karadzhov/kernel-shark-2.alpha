@@ -137,7 +137,7 @@ void setElidedText(QLabel* label, QString text,
 
 QStringList splitArguments(QString cmd);
 
-QStringList getTepEvtName(kshark_data_stream *stream, int eventId);
+QStringList getTepEvtName(int sd, int eventId);
 
 /** Get a string to be used as a standard name of a CPU graph. */
 inline QString cpuPlotName(int cpu) {return QString("CPU %1").arg(cpu);}

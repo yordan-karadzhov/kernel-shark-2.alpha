@@ -237,6 +237,7 @@ static int getVCPU(plugin_kvm_context *plugin_ctx,
 {
 	int values[2] = {plugin_ctx->vm_entry_id, pid};
 	const kshark_entry *entry;
+	unsigned long long vcpu;
 
 	for (int b = 0; b < histo->n_bins; ++b) {
 		entry = ksmodel_get_entry_front(histo,
@@ -248,7 +249,8 @@ static int getVCPU(plugin_kvm_context *plugin_ctx,
 		if (!entry)
 			continue;
 
-		return kshark_tep_read_event_field(entry, "vcpu_id", -1);
+		if (kshark_read_event_field(entry, "vcpu_id", &vcpu) >= 0)
+			return vcpu;
 	}
 
 	return -1;
@@ -267,7 +269,7 @@ HostMap getVCPUPids(kshark_context *kshark_ctx, kshark_trace_histo *histo)
 		if (!plugin_ctx)
 			continue;
 
-		/* This stream continues KVM events. */
+		/* This stream contains KVM events. */
 		n_vcpus = plugin_ctx->vcpu_pids->count;
 		if (n_vcpus) {
 			VCPUVector vcpus(n_vcpus);

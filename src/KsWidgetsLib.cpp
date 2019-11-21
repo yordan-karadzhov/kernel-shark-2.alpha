@@ -911,7 +911,8 @@ void KsEventsCheckBoxWidget::_makeTepEventItems(kshark_data_stream *stream,
 	_id.resize(stream->n_events);
 	_cb.resize(stream->n_events);
 	while (i < stream->n_events) {
-		name = KsUtils::getTepEvtName(stream, eventIds[i]);
+		name = KsUtils::getTepEvtName(stream->stream_id,
+					      eventIds[i]);
 		sysName = name[0];
 		sysItem = new QTreeWidgetItem;
 		sysItem->setText(0, sysName);
@@ -933,7 +934,8 @@ void KsEventsCheckBoxWidget::_makeTepEventItems(kshark_data_stream *stream,
 			if (++i == stream->n_events)
 				break;
 
-			name = KsUtils::getTepEvtName(stream, eventIds[i]);
+			name = KsUtils::getTepEvtName(stream->stream_id,
+						      eventIds[i]);
 		}
 	}
 

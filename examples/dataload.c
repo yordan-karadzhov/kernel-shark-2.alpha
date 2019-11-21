@@ -49,7 +49,7 @@ int main(int argc, char **argv)
 	n_tasks = kshark_get_task_pids(kshark_ctx, sd, &pids);
 	for (r = 0; r < n_tasks; ++r) {
 		char *task_str =
-			kshark_comm_from_pid(kshark_ctx->stream[sd], pids[r]);
+			kshark_comm_from_pid(sd, pids[r]);
 		printf("task: %s-%i\n", task_str, pids[r]);
 		free(task_str);
 	}
