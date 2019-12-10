@@ -57,7 +57,7 @@ struct kshark_entry {
 	int32_t		event_id;
 
 	/** The offset into the trace file, used to find the record. */
-	uint64_t	offset;
+	int64_t		offset;
 
 	/**
 	 * The time of the record in nano seconds. The value is taken from
@@ -118,11 +118,11 @@ typedef ssize_t (*load_entries_func) (struct kshark_data_stream *,
 /** A function type to be used by the method interface of the data stream. */
 typedef ssize_t (*load_matrix_func) (struct kshark_data_stream *,
 				     struct kshark_context *,
-				     uint64_t **,
-				     uint16_t **,
-				     uint64_t **,
-				     uint16_t **,
-				     int **);
+				     int16_t **cpu_array,
+				     int32_t **pid_array,
+				     int32_t **event_array,
+				     int64_t **offset_array,
+				     uint64_t **ts_array);
 
 /** Data format identifier. */
 enum kshark_data_format {
@@ -561,7 +561,7 @@ enum kshark_search_failed {
 };
 
 /** General purpose Binary search macro. */
-#define BSEARCH(h, l, cond) 				\
+#define BSEARCH(h, l, cond)				\
 	{						\
 		while (h - l > 1) {			\
 			mid = (l + h) / 2;		\
@@ -1026,6 +1026,12 @@ struct kshark_config_doc *kshark_open_config_file(const char *file_name,
 						  const char *type);
 
 struct kshark_config_doc *kshark_json_to_conf(struct json_object *jobj);
+
+bool data_matrix_alloc(size_t n_rows, int16_t **cpu_array,
+				      int32_t **pid_array,
+				      int32_t **event_array,
+				      int64_t **offset_array,
+				      uint64_t **ts_array);
 
 #ifdef __cplusplus
 }

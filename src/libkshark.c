@@ -1299,3 +1299,60 @@ ssize_t kshark_load_all_entries(struct kshark_context *kshark_ctx,
 
 	return data_size;
 }
+
+static inline void free_ptr(void *ptr)
+{
+	if (ptr)
+		free(*(void **)ptr);
+}
+
+bool data_matrix_alloc(size_t n_rows, int16_t **cpu_array,
+				      int32_t **pid_array,
+				      int32_t **event_array,
+				      int64_t **offset_array,
+				      uint64_t **ts_array)
+{
+	if (offset_array) {
+		*offset_array = calloc(n_rows, sizeof(**offset_array));
+		if (!*offset_array)
+			return false;
+	}
+
+	if (cpu_array) {
+		*cpu_array = calloc(n_rows, sizeof(**cpu_array));
+		if (!*cpu_array)
+			goto free_offset;
+	}
+
+	if (ts_array) {
+		*ts_array = calloc(n_rows, sizeof(**ts_array));
+		if (!*ts_array)
+			goto free_cpu;
+	}
+
+	if (pid_array) {
+		*pid_array = calloc(n_rows, sizeof(**pid_array));
+		if (!*pid_array)
+			goto free_ts;
+	}
+
+	if (event_array) {
+		*event_array = calloc(n_rows, sizeof(**event_array));
+		if (!*event_array)
+			goto free_pid;
+	}
+
+	return true;
+
+ free_pid:
+	free_ptr(pid_array);
+ free_ts:
+	free_ptr(ts_array);
+ free_cpu:
+	free_ptr(cpu_array);
+ free_offset:
+	free_ptr(offset_array);
+
+	fprintf(stderr, "Failed to allocate memory during data loading.\n");
+	return false;
+}

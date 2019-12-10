@@ -397,7 +397,7 @@ static int pick_next_cpu(struct rec_list **rec_list, int n_cpus,
  * @returns The size of the outputted data in the case of success, or a
  *	    negative error code on failure.
  */
-ssize_t kshark_load_tep_entries(struct kshark_data_stream *stream,
+ssize_t tepdata_load_entries(struct kshark_data_stream *stream,
 				struct kshark_context *kshark_ctx,
 				struct kshark_entry ***data_rows)
 {
@@ -439,85 +439,13 @@ ssize_t kshark_load_tep_entries(struct kshark_data_stream *stream,
 	return -ENOMEM;
 }
 
-static inline void free_ptr(void *ptr)
-{
-	if (ptr)
-		free(*(void **)ptr);
-}
-
-static bool data_matrix_alloc(size_t n_rows, uint64_t **offset_array,
-					     uint16_t **cpu_array,
-					     uint64_t **ts_array,
-					     uint16_t **pid_array,
-					     int **event_array)
-{
-	if (offset_array) {
-		*offset_array = calloc(n_rows, sizeof(**offset_array));
-		if (!*offset_array)
-			return false;
-	}
-
-	if (cpu_array) {
-		*cpu_array = calloc(n_rows, sizeof(**cpu_array));
-		if (!*cpu_array)
-			goto free_offset;
-	}
-
-	if (ts_array) {
-		*ts_array = calloc(n_rows, sizeof(**ts_array));
-		if (!*ts_array)
-			goto free_cpu;
-	}
-
-	if (pid_array) {
-		*pid_array = calloc(n_rows, sizeof(**pid_array));
-		if (!*pid_array)
-			goto free_ts;
-	}
-
-	if (event_array) {
-		*event_array = calloc(n_rows, sizeof(**event_array));
-		if (!*event_array)
-			goto free_pid;
-	}
-
-	return true;
-
- free_pid:
-	free_ptr(pid_array);
- free_ts:
-	free_ptr(ts_array);
- free_cpu:
-	free_ptr(cpu_array);
- free_offset:
-	free_ptr(offset_array);
-
-	fprintf(stderr, "Failed to allocate memory during data loading.\n");
-	return false;
-}
-
-/**
- * @brief Load the content of the trace data file into a table / matrix made
- *	  of columns / arrays of data. The user is responsible for freeing the
- *	  elements of the outputted array
- *
- * @param kshark_ctx: Input location for the session context pointer.
- * @param offset_array: Output location for the array of record offsets.
- * @param cpu_array: Output location for the array of CPU Ids.
- * @param ts_array: Output location for the array of timestamps.
- * @param pid_array: Output location for the array of Process Ids.
- * @param event_array: Output location for the array of Event Ids.
- *
- * @returns The size of the outputted arrays in the case of success, or a
- *	    negative error code on failure.
- */
-ssize_t kshark_load_tep_matrix(struct kshark_data_stream *stream,
-			       struct kshark_context *kshark_ctx,
-			       uint64_t **offset_array,
-			       uint16_t **cpu_array,
-			       uint64_t **ts_array,
-			       uint16_t **pid_array,
-			       int **event_array)
+static ssize_t tepdata_load_matrix(struct kshark_data_stream *stream,
+				   struct kshark_context *kshark_ctx,
+				   int16_t **cpu_array,
+				   int32_t **pid_array,
+				   int32_t **event_array,
+				   int64_t **offset_array,
+				   uint64_t **ts_array)
 {
 	enum rec_type type = REC_ENTRY;
 	struct rec_list **rec_list;
@@ -528,11 +456,11 @@ ssize_t kshark_load_tep_matrix(struct kshark_data_stream *stream,
 	if (total < 0)
 		goto fail;
 
-	status = data_matrix_alloc(total, offset_array,
-					  cpu_array,
-					  ts_array,
+	status = data_matrix_alloc(total, cpu_array,
 					  pid_array,
-					  event_array);
+					  event_array,
+					  offset_array,
+					  ts_array);
 	if (!status)
 		goto fail_free;
 
@@ -1014,10 +942,10 @@ static const int tepdata_find_event_id(struct kshark_data_stream *stream,
 	return event->id;
 }
 
-int tep_read_event_field(struct kshark_data_stream *stream,
-			 const struct kshark_entry *entry,
-			 const char *field,
-			 unsigned long long *val)
+int tepdata_read_event_field(struct kshark_data_stream *stream,
+			     const struct kshark_entry *entry,
+			     const char *field,
+			     unsigned long long *val)
 {
 	struct tep_format_field *evt_field;
 	struct tep_record *record;
@@ -1054,9 +982,9 @@ static void kshark_tep_init_methods(struct kshark_data_stream *stream)
 	stream->interface.find_event_id = tepdata_find_event_id;
 	stream->interface.get_all_event_ids = tepdata_get_event_ids;
 	stream->interface.dump_entry = tepdata_dump_entry;
-	stream->interface.read_event_field = tep_read_event_field;
-	stream->interface.load_entries = kshark_load_tep_entries;
-	stream->interface.load_matrix = kshark_load_tep_matrix;
+	stream->interface.read_event_field = tepdata_read_event_field;
+	stream->interface.load_entries = tepdata_load_entries;
+	stream->interface.load_matrix = tepdata_load_matrix;
 }
 
 /** Initialize the FTRACE data input (from file). */

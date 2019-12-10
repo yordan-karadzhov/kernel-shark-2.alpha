@@ -109,7 +109,7 @@ static void free_input(struct kshark_input_list *input)
  * @param file: The input object file to unregister.
  */
 void kshark_unregister_input(struct kshark_context *kshark_ctx,
-			      const char *file)
+			     const char *file)
 {
 	struct kshark_input_list **last;
 
