@@ -813,6 +813,39 @@ void kshark_clear_all_filters(struct kshark_context *kshark_ctx,
 }
 
 /**
+ * @brief Post-process the content of the entry. This includes time calibration
+ *	  and all registered event-specific plugin actions.
+ *
+ * @param kshark_ctx: Input location for the session context pointer. If NULL,
+ *		      no plugin actions are applied.
+ * @param stream: Input location for a Trace data stream pointer.
+ * @param record: Input location for the trace record.
+ * @param entry: Output location for entry.
+ */
+void kshark_postprocess_entry(struct kshark_context *kshark_ctx,
+			      struct kshark_data_stream *stream,
+			      void *record, struct kshark_entry *entry)
+{
+	if (stream && stream->calib && stream->calib_array) {
+		/* Calibrate the timestamp of the entry. */
+		stream->calib(entry, stream->calib_array);
+	}
+
+	if (kshark_ctx &&  kshark_ctx->event_handlers) {
+		/* Execute all plugin-provided actions for this event (if any). */
+		struct kshark_event_handler *evt_handler = kshark_ctx->event_handlers;
+
+		while ((evt_handler = kshark_find_event_handler(evt_handler,
+								entry->event_id,
+								entry->stream_id))) {
+			evt_handler->event_func(kshark_ctx, record, entry);
+			evt_handler = evt_handler->next;
+			entry->visible &= ~KS_PLUGIN_UNTOUCHED_MASK;
+		}
+	}
+}
+
+/**
  * @brief Binary search inside a time-sorted array of kshark_entries.
  *
  * @param time: The value of time to search for.

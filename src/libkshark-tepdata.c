@@ -230,7 +230,6 @@ static ssize_t get_records(struct kshark_context *kshark_ctx,
 			   struct rec_list ***rec_list,
 			   enum rec_type type)
 {
-	struct kshark_event_handler *evt_handler;
 	struct tep_event_filter *adv_filter;
 	struct rec_list **temp_next;
 	struct rec_list **cpu_list;
@@ -275,9 +274,8 @@ static ssize_t get_records(struct kshark_context *kshark_ctx,
 					entry = &temp_rec->entry;
 					missed_events_action(stream, rec, entry);
 
-					if (stream->calib && stream->calib_array)
-						stream->calib(entry,
-									stream->calib_array);
+					/* Apply time calibration. */
+					kshark_postprocess_entry(NULL, stream, rec, entry);
 
 					entry->stream_id = stream->stream_id;
 
@@ -300,18 +298,11 @@ static ssize_t get_records(struct kshark_context *kshark_ctx,
 
 				entry->stream_id = stream->stream_id;
 
-				if (stream->calib && stream->calib_array)
-					stream->calib(entry, stream->calib_array);
-
-				/* Execute all plugin-provided actions (if any). */
-				evt_handler = kshark_ctx->event_handlers;
-				while ((evt_handler = kshark_find_event_handler(evt_handler,
-										entry->event_id,
-										entry->stream_id))) {
-					evt_handler->event_func(kshark_ctx, rec, entry);
-					evt_handler = evt_handler->next;
-					entry->visible &= ~KS_PLUGIN_UNTOUCHED_MASK;
-				}
+				/*
+				 * Post-process the content of the entry. This includes
+				 * time calibration and event-specific plugin actions.
+				 */
+				kshark_postprocess_entry(kshark_ctx, stream, rec, entry);
 
 				pid = entry->pid;
 
