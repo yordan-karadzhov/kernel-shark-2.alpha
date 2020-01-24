@@ -559,7 +559,8 @@ static bool kshark_trace_file_from_json(const char **file, const char *type,
 	}
 
 	if (st.st_mtime != time) {
-		fprintf(stderr,"Timestamp mismatch!\nFile %s", file_str);
+		fprintf(stderr, "Timestamp mismatch! (%li!=%li)\nFile %s\n",
+				time, st.st_mtime, file_str);
 		return false;
 	}
 
@@ -669,8 +670,13 @@ static bool kshark_inputs_from_json(struct kshark_context *kshark_ctx,
 	n_inputs = json_object_array_length(jlist);
 	for (i = 0; i < n_inputs; ++i) {
 		jfile = json_object_array_get_idx(jlist, i);
-		if (kshark_trace_file_from_json(&file, NULL, jfile))
-			kshark_register_input(kshark_ctx, file);
+		if (!kshark_trace_file_from_json(&file, NULL, jfile)) {
+			fprintf(stderr,
+				"Failed to import data input plugin!\n");
+			return false;
+		}
+
+		kshark_register_input(kshark_ctx, file);
 	}
 
 	return true;
