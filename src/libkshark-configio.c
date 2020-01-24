@@ -848,16 +848,16 @@ static bool kshark_event_filter_to_json(struct kshark_data_stream *stream,
 					const char *filter_name,
 					struct json_object *jobj)
 {
-	json_object *jfilter_data, *jevent, *jname;
+	json_object *jfilter_data, *jname;
 	struct kshark_hash_id *filter;
-	int i, evt, *ids;
+	int i, *ids;
 	char *name_str;
 
 	filter = kshark_get_filter(stream, filter_type);
 	if (!filter)
 		return false;
 
-	jevent = jname = NULL;
+	jname = NULL;
 
 	/*
 	 * If this Json document already contains a description of the filter,
@@ -876,19 +876,14 @@ static bool kshark_event_filter_to_json(struct kshark_data_stream *stream,
 		goto fail;
 
 	for (i = 0; i < filter->count; ++i) {
-		for (evt = 0; evt < stream->n_events; ++evt) {
-			name_str = kshark_event_from_id(stream->stream_id,
-							ids[i]);
-			if (name_str) {
-				jevent = json_object_new_object();
-				jname = json_object_new_string(name_str);
+		name_str = kshark_event_from_id(stream->stream_id,
+						ids[i]);
+		if (name_str) {
+			jname = json_object_new_string(name_str);
+			if (!jname)
+				goto fail;
 
-				if (!jevent || !jname)
-					goto fail;
-
-				json_object_object_add(jevent, "name", jname);
-				json_object_array_add(jfilter_data, jevent);
-			}
+			json_object_array_add(jfilter_data, jname);
 		}
 	}
 
@@ -902,7 +897,6 @@ static bool kshark_event_filter_to_json(struct kshark_data_stream *stream,
  fail:
 	fprintf(stderr, "Failed to allocate memory for json_object.\n");
 	json_object_put(jfilter_data);
-	json_object_put(jevent);
 	json_object_put(jname);
 	free(ids);
 
@@ -944,7 +938,7 @@ static int kshark_event_filter_from_json(struct kshark_data_stream *stream,
 					 const char *filter_name,
 					 struct json_object *jobj)
 {
-	json_object *jfilter, *jevent, *jname;
+	json_object *jfilter, *jevent;
 	int i, length, event_id, count = 0;
 	struct kshark_hash_id *filter;
 	const char *name_str;
@@ -969,11 +963,7 @@ static int kshark_event_filter_from_json(struct kshark_data_stream *stream,
 	length = json_object_array_length(jfilter);
 	for (i = 0; i < length; ++i) {
 		jevent = json_object_array_get_idx(jfilter, i);
-
-		if (!json_object_object_get_ex(jevent, "name", &jname))
-			goto fail;
-
-		name_str = json_object_get_string(jname);
+		name_str = json_object_get_string(jevent);
 		event_id = stream->interface.find_event_id(stream, name_str);
 		if (event_id < 0)
 			continue;
