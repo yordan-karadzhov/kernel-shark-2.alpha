@@ -260,7 +260,7 @@ void plugin_draw(kshark_cpp_argv *argv_c, int sd, int pid, int draw_action)
 	kshark_hash_id *second_pass_hash;
 	kshark_context *kshark_ctx(NULL);
 
-	if (draw_action != KSHARK_PLUGIN_TASK_DRAW || pid == 0)
+	if (!(draw_action & KsPlot::KSHARK_TASK_DRAW) || pid == 0)
 		return;
 
 	second_pass_hash = get_second_pass_hash(sd);

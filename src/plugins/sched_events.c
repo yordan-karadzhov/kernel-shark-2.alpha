@@ -124,20 +124,17 @@ static void plugin_free_context(struct plugin_sched_context *plugin_ctx)
 	free(plugin_ctx);
 }
 
-static bool plugin_sched_init_context(struct kshark_context *kshark_ctx,
-				      int sd)
+static bool plugin_sched_init_context(struct kshark_data_stream *stream)
 {
 	struct plugin_sched_context *plugin_ctx;
-	struct kshark_data_stream *stream;
 	struct tep_event *event;
 	bool wakeup_found;
 
-	stream = kshark_get_data_stream(kshark_ctx, sd);
-	if (!stream || stream->format != KS_TEP_DATA)
+	if (stream->format != KS_TEP_DATA)
 		return false;
 
 	/* No context should exist when we initialize the plugin. */
-	assert(plugin_sched_context_handler[sd] == NULL);
+	assert(plugin_sched_context_handler[stream->stream_id] == NULL);
 
 	plugin_ctx = calloc(1, sizeof(*plugin_ctx));
 	if (!plugin_ctx) {
@@ -178,7 +175,7 @@ static bool plugin_sched_init_context(struct kshark_context *kshark_ctx,
 					    &plugin_ctx->sched_waking_pid_field);
 
 	plugin_ctx->second_pass_hash = kshark_hash_id_alloc(KS_TASK_HASH_NBITS);
-	plugin_sched_context_handler[sd] = plugin_ctx;
+	plugin_sched_context_handler[stream->stream_id] = plugin_ctx;
 
 	return true;
 }
@@ -371,7 +368,7 @@ bool plugin_match_pid(struct kshark_context *kshark_ctx,
 	       plugin_wakeup_match_rec_pid(kshark_ctx, e, sd, pid);
 }
 
-static void plugin_sched_action(struct kshark_context *kshark_ctx, void *rec,
+static void plugin_sched_action(struct kshark_data_stream *stream, void *rec,
 				struct kshark_entry *entry)
 {
 	int next_pid = plugin_get_next_pid(rec, entry->stream_id);
@@ -380,57 +377,57 @@ static void plugin_sched_action(struct kshark_context *kshark_ctx, void *rec,
 	}
 }
 
-static int plugin_sched_init(struct kshark_context *kshark_ctx, int sd)
+static int plugin_sched_init(struct kshark_data_stream *stream)
 {
 	struct plugin_sched_context *plugin_ctx;
 
-	if (!plugin_sched_init_context(kshark_ctx, sd))
+	if (!plugin_sched_init_context(stream))
 		return 0;
 
-	plugin_ctx = plugin_sched_context_handler[sd];
+	plugin_ctx = plugin_sched_context_handler[stream->stream_id];
 
-	kshark_register_event_handler(&kshark_ctx->event_handlers,
+	kshark_register_event_handler(stream,
 				      plugin_ctx->sched_switch_event->id,
-				      sd,
-				      plugin_sched_action,
-				      plugin_draw);
+				      plugin_sched_action);
+
+	kshark_register_draw_handler(stream, plugin_draw);
 
 	return 1;
 }
 
-static int plugin_sched_close(struct kshark_context *kshark_ctx, int sd)
+static int plugin_sched_close(struct kshark_data_stream *stream)
 {
 	struct plugin_sched_context *plugin_ctx;
 
-	plugin_ctx = plugin_sched_context_handler[sd];
+	plugin_ctx = plugin_sched_context_handler[stream->stream_id];
 	if (!plugin_ctx)
 		return 0;
 
-	kshark_unregister_event_handler(&kshark_ctx->event_handlers,
+	kshark_unregister_event_handler(stream,
 					plugin_ctx->sched_switch_event->id,
-					sd,
-					plugin_sched_action,
-					plugin_draw);
+					plugin_sched_action);
+
+	kshark_unregister_draw_handler(stream, plugin_draw);
 
 	kshark_hash_id_free(plugin_ctx->second_pass_hash);
 
 	kshark_free_collection_list(plugin_ctx->collections);
-	free(plugin_sched_context_handler[sd]);
-	plugin_sched_context_handler[sd] = NULL;
+	free(plugin_sched_context_handler[stream->stream_id]);
+	plugin_sched_context_handler[stream->stream_id] = NULL;
 
 	return 1;
 }
 
 /** Load this plugin. */
-int KSHARK_PLUGIN_INITIALIZER(struct kshark_context *kshark_ctx, int sd)
+int KSHARK_PLOT_PLUGIN_INITIALIZER(struct kshark_data_stream *stream)
 {
-	printf("--> sched init %i\n", sd);
-	return plugin_sched_init(kshark_ctx, sd);
+	printf("--> sched init %i\n", stream->stream_id);
+	return plugin_sched_init(stream);
 }
 
 /** Unload this plugin. */
-int KSHARK_PLUGIN_DEINITIALIZER(struct kshark_context *kshark_ctx, int sd)
+int KSHARK_PLOT_PLUGIN_DEINITIALIZER(struct kshark_data_stream *stream)
 {
-	printf("<-- sched close %i\n", sd);
-	return plugin_sched_close(kshark_ctx, sd);
+	printf("<-- sched close %i\n", stream->stream_id);
+	return plugin_sched_close(stream);
 }

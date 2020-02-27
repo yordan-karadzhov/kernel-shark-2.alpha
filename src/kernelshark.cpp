@@ -27,7 +27,6 @@ void usage(const char *prog)
 	printf("  -i	prior input file, default is %s\n", default_input_file);
 	printf("  -a	input file to append to the prior\n");
 	printf("  -p	register plugin, use plugin name, absolute or relative path\n");
-	printf("  -d	register user data input, use absolute or relative path\n");
 	printf("  -u	unregister plugin, use plugin name or absolute path\n");
 	printf("  -s	import a session\n");
 	printf("  -l	import the last session\n");
@@ -43,7 +42,7 @@ int main(int argc, char **argv)
 	int c;
 	bool fromSession = false;
 
-	while ((c = getopt(argc, argv, "hvi:a:p:d:u:s:l")) != -1) {
+	while ((c = getopt(argc, argv, "hvi:a:p:u:s:l")) != -1) {
 		switch(c) {
 		case 'h':
 			usage(argv[0]);
@@ -62,15 +61,11 @@ int main(int argc, char **argv)
 			break;
 
 		case 'p':
-			ks.registerPlugin(QString(optarg));
-			break;
-
-		case 'd':
-			ks.registerInput(QStringList(optarg));
+			ks.registerPlugins(QString(optarg));
 			break;
 
 		case 'u':
-			ks.unregisterPlugin(QString(optarg));
+			ks.unregisterPlugins(QString(optarg));
 			break;
 
 		case 's':

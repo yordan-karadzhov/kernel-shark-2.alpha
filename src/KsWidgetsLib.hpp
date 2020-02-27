@@ -66,6 +66,7 @@ enum class KsDataWork
 	ScrollRight,
 	JumpTo,
 	GraphUpdateGeom,
+	UpdatePligins,
 };
 
 inline uint qHash(KsDataWork key, uint seed)
@@ -321,8 +322,7 @@ private:
 
 /**
  * The KsPluginsCheckBoxDialog provides dialog for selecting plugins.
- * used by KernelShark. The class is used to override _preApplyAction() and
- * _postApplyAction().
+ * used by KernelShark. The class is used to override _postApplyAction().
  */
 class KsPluginsCheckBoxDialog : public KsCheckBoxDialog
 {
@@ -335,11 +335,9 @@ public:
 	: KsCheckBoxDialog(cbws, parent), _data(d) {}
 
 private:
-	virtual void _preApplyAction() override;
-
 	virtual void _postApplyAction() override;
 
-	KsDataStore		*_data;
+	KsDataStore	*_data;
 };
 
 /** The KsCheckBoxTable class provides a table of checkboxes. */
@@ -542,6 +540,18 @@ struct KsPluginCheckBoxWidget : public KsCheckBoxTableWidget
 	KsPluginCheckBoxWidget(int sd,
 			       QStringList pluginList,
 			       QWidget *parent = nullptr);
+
+	void setInfo(int row, QString info);
+
+	void setActive(QVector<int> rows, bool a);
+};
+
+/**
+ * The KsDStreamCheckBoxWidget class provides a widget for selecting Data streams.
+ */
+struct KsDStreamCheckBoxWidget : public KsCheckBoxTableWidget
+{
+	explicit KsDStreamCheckBoxWidget(QWidget *parent = nullptr);
 };
 
 }; // KsWidgetsLib

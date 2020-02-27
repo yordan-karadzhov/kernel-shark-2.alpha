@@ -13,7 +13,6 @@ add_library(kshark SHARED libkshark.c
                           libkshark-tepdata.c
                           libkshark-hash.c
                           libkshark-model.c
-                          libkshark-input.c
                           libkshark-plugin.c
                           libkshark-configio.c
                           libkshark-collection.c)
@@ -34,7 +33,6 @@ if (_DEVEL)
 
     install(FILES "${KS_DIR}/src/libkshark.h"
                   "${KS_DIR}/src/libkshark-plugin.h"
-                  "${KS_DIR}/src/libkshark-input.h"
                   "${KS_DIR}/src/libkshark-tepdata.h"
             DESTINATION ${KS_INCLUDS_DESTINATION})
 

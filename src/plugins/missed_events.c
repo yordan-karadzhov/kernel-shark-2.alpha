@@ -16,34 +16,22 @@
 // KernelShark
 #include "plugins/missed_events.h"
 
-static void nop_action(struct kshark_context *kshark_ctx, void *rec,
-		       struct kshark_entry *entry)
-{}
-
 /** Load this plugin. */
-int KSHARK_PLUGIN_INITIALIZER(struct kshark_context *kshark_ctx, int sd)
+int KSHARK_PLOT_PLUGIN_INITIALIZER(struct kshark_data_stream *stream)
 {
-	printf("--> missed_events init %i\n", sd);
+	printf("--> missed_events init %i\n", stream->stream_id);
 
-	kshark_register_event_handler(&kshark_ctx->event_handlers,
-				      KS_EVENT_OVERFLOW,
-				      sd,
-				      nop_action,
-				      draw_missed_events);
+	kshark_register_draw_handler(stream, draw_missed_events);
 
 	return 1;
 }
 
 /** Unload this plugin. */
-int KSHARK_PLUGIN_DEINITIALIZER(struct kshark_context *kshark_ctx, int sd)
+int KSHARK_PLOT_PLUGIN_DEINITIALIZER(struct kshark_data_stream *stream)
 {
-	printf("<-- missed_events close %i\n", sd);
+	printf("<-- missed_events close %i\n", stream->stream_id);
 
-	kshark_unregister_event_handler(&kshark_ctx->event_handlers,
-					KS_EVENT_OVERFLOW,
-					sd,
-					nop_action,
-					draw_missed_events);
+	kshark_unregister_draw_handler(stream, draw_missed_events);
 
 	return 1;
 }

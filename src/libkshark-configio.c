@@ -22,8 +22,8 @@
 
 // KernelShark
 #include "libkshark.h"
-#include "libkshark-input.h"
 #include "libkshark-model.h"
+#include "libkshark-plugin.h"
 #include "libkshark-tepdata.h"
 
 static struct json_object *kshark_json_config_alloc(const char *type)
@@ -498,7 +498,7 @@ static bool kshark_trace_file_to_json(const char *file,
  *		  Currently only Json format is supported.
  *
  * @returns kshark_config_doc instance on success, otherwise NULL. Use
- *	    free() to free the object.
+ *	    kshark_free_config_doc() to free the object.
  */
 struct kshark_config_doc *
 kshark_export_trace_file(const char *file,
@@ -603,46 +603,45 @@ int kshark_import_trace_file(struct kshark_context *kshark_ctx,
 	return sd;
 }
 
-static bool kshark_inputs_to_json(struct kshark_context *kshark_ctx,
+static bool kshark_plugin_to_json(struct kshark_plugin_list *plugin,
 				  struct json_object *jobj)
 {
-	json_object *jfile, *jlist = json_object_new_array();
-	struct kshark_input_list *input;
+	struct json_object *jname = json_object_new_string(plugin->name);
 
-	for (input = kshark_ctx->inputs; input; input = input->next) {
-		jfile = json_object_new_object();
-		kshark_trace_file_to_json(input->file, jfile);
-		json_object_array_add(jlist, jfile);
+	if (!kshark_trace_file_to_json(plugin->file, jobj) || !jname) {
+		json_object_put(jname);
+		return false;
 	}
 
-	json_object_object_add(jobj, "obj. files", jlist);
+	json_object_object_add(jobj, "name", jname);
 	return true;
 }
 
 /**
- * @brief Record the current list of registered user inputs into a
+ * @brief Record the name of a plugin's obj file and its timestamp into a
  *	  Configuration document.
  *
- * @param kshark_ctx: Input location for session context pointer.
- * @param conf: Input location for the kshark_config_doc instance. Currently
- *		only Json format is supported.
+ * @param plugin: The plugin to be expected.
+ * @param format: Input location for the Configuration format identifier.
+ *		  Currently only Json format is supported.
  *
  * @returns kshark_config_doc instance on success, otherwise NULL. Use
- *	    free() to free the object.
+ *	    kshark_free_config_doc() to free the object.
  */
 struct kshark_config_doc *
-kshark_export_user_inputs(struct kshark_context *kshark_ctx,
+kshark_export_plugin_file(struct kshark_plugin_list *plugin,
 			  enum kshark_config_formats format)
 {
+	/*  Create a new Configuration document. */
 	struct kshark_config_doc *conf =
-		kshark_config_new("kshark.config.inputs", KS_CONFIG_JSON);
+		kshark_config_new("kshark.config.library", format);
 
 	if (!conf)
 		return NULL;
 
 	switch (format) {
 	case KS_CONFIG_JSON:
-		kshark_inputs_to_json(kshark_ctx, conf->conf_doc);
+		kshark_plugin_to_json(plugin, conf->conf_doc);
 		return conf;
 
 	default:
@@ -652,57 +651,284 @@ kshark_export_user_inputs(struct kshark_context *kshark_ctx,
 	}
 }
 
-static bool kshark_inputs_from_json(struct kshark_context *kshark_ctx,
+static bool kshark_all_plugins_to_json(struct kshark_context *kshark_ctx,
+				       struct json_object *jobj)
+{
+	struct kshark_plugin_list *plugin = kshark_ctx->plugins;
+	struct json_object *jfile, *jlist;
+
+	jlist = json_object_new_array();
+	if (!jlist)
+		return false;
+
+	while (plugin) {
+		jfile = json_object_new_object();
+		if (!kshark_trace_file_to_json(plugin->file, jfile))
+			goto fail;
+
+		json_object_array_add(jlist, jfile);
+		plugin = plugin->next;
+	}
+
+	json_object_object_add(jobj, "obj. files", jlist);
+
+	return true;
+
+ fail:
+	fprintf(stderr, "Failed to allocate memory for json_object.\n");
+	json_object_put(jobj);
+	json_object_put(jlist);
+	return false;
+}
+
+/**
+ * @brief Record the current list of registered plugins into a
+ *	  Configuration document.
+ *
+ * @param kshark_ctx: Input location for session context pointer.
+ * @param conf: Input location for the kshark_config_doc instance. Currently
+ *		only Json format is supported.
+ *
+ * @returns kshark_config_doc instance on success, otherwise NULL. Use
+ *	    kshark_free_config_doc() to free the object.
+ */
+struct kshark_config_doc *
+kshark_export_all_plugins(struct kshark_context *kshark_ctx,
+			  enum kshark_config_formats format)
+{
+	struct kshark_config_doc *conf =
+		kshark_config_new("kshark.config.plugins", KS_CONFIG_JSON);
+
+	if (!conf)
+		return NULL;
+
+	switch (format) {
+	case KS_CONFIG_JSON:
+		kshark_all_plugins_to_json(kshark_ctx, conf->conf_doc);
+		return conf;
+
+	default:
+		fprintf(stderr, "Document format %d not supported\n",
+			conf->format);
+		return NULL;
+	}
+}
+
+static bool kshark_plugin_from_json(struct kshark_context *kshark_ctx,
 				    struct json_object *jobj)
 {
+	struct json_object *jname;
+	const char *file, *name;
+
+	if (!kshark_trace_file_from_json(&file, NULL, jobj) ||
+	    !json_object_object_get_ex(jobj, "name", &jname)) {
+		fprintf(stderr, "Failed to import plugin!\n");
+		return false;
+	}
+
+	name = json_object_get_string(jname);
+	if (!name)
+		goto fail;
+
+	kshark_register_plugin(kshark_ctx, name, file);
+
+	return true;
+
+ fail:
+	json_object_put(jname);
+	return false;
+}
+
+static bool kshark_all_plugins_from_json(struct kshark_context *kshark_ctx,
+					 struct json_object *jobj)
+{
 	struct json_object *jlist, *jfile;
-	const char *file;
-	int i, n_inputs;
+	int i, n_plugins;
 
 	if (!kshark_ctx || !jobj)
 		return false;
 
-	if (!kshark_json_type_check(jobj, "kshark.config.inputs") ||
+	if (!kshark_json_type_check(jobj, "kshark.config.plugins") ||
 	    !json_object_object_get_ex(jobj, "obj. files", &jlist) ||
 	    json_object_get_type(jlist) != json_type_array)
 		goto fail;
 
-	n_inputs = json_object_array_length(jlist);
-	for (i = 0; i < n_inputs; ++i) {
+	n_plugins = json_object_array_length(jlist);
+	for (i = 0; i < n_plugins; ++i) {
 		jfile = json_object_array_get_idx(jlist, i);
-		if (!kshark_trace_file_from_json(&file, NULL, jfile)) {
-			fprintf(stderr,
-				"Failed to import data input plugin!\n");
-			return false;
-		}
+		if (!jfile)
+			goto fail;
 
-		kshark_register_input(kshark_ctx, file);
+		kshark_plugin_from_json(kshark_ctx, jfile);
 	}
 
 	return true;
 
  fail:
+	json_object_put(jfile);
+	json_object_put(jlist);
 	return false;
 }
 
 /**
- * @brief Load the list of registered user inputs from a Configuration
+ * @brief Load the list of registered plugins from a Configuration
  *	  document.
  *
  * @param kshark_ctx: Input location for session context pointer.
  * @param conf: Input location for the kshark_config_doc instance. Currently
  *		only Json format is supported.
  *
- * @returns True, if user inputs have been loaded. If the configuration
+ * @returns True, if plugins have been loaded. If the configuration
  *	    document contains no data or in a case of an error, the function
  *	    returns False.
  */
-bool kshark_import_user_inputs(struct kshark_context *kshark_ctx,
+bool kshark_import_all_plugins(struct kshark_context *kshark_ctx,
 			       struct kshark_config_doc *conf)
 {
 	switch (conf->format) {
 	case KS_CONFIG_JSON:
-		return kshark_inputs_from_json(kshark_ctx, conf->conf_doc);
+		return kshark_all_plugins_from_json(kshark_ctx,
+						    conf->conf_doc);
+
+	default:
+		fprintf(stderr, "Document format %d not supported\n",
+			conf->format);
+		return false;
+	}
+}
+
+static void kshark_stream_plugins_to_json(struct kshark_data_stream *stream,
+				          struct json_object *jobj)
+{
+	struct kshark_dpi_list *plugin = stream->plugins;
+	struct json_object *jlist, *jplg;
+	bool active;
+
+	jlist = json_object_new_array();
+	while (plugin) {
+		jplg = json_object_new_array();
+		json_object_array_add(jplg,
+				      json_object_new_string(plugin->interface->name));
+
+		active = plugin->status & KSHARK_PLUGIN_ENABLED;
+		json_object_array_add(jplg, json_object_new_boolean(active));
+
+		json_object_array_add(jlist, jplg);
+
+		plugin = plugin->next;
+	}
+
+	json_object_object_add(jobj, "registered", jlist);
+}
+
+/**
+ * @brief Record the current list of plugins registered for a given Data
+ *	  stream into a Configuration document.
+ *
+ * @param kshark_ctx: Input location for session context pointer.
+ * @param conf: Input location for the kshark_config_doc instance. Currently
+ *		only Json format is supported.
+ *
+ * @returns kshark_config_doc instance on success, otherwise NULL. Use
+ *	    kshark_free_config_doc() to free the object.
+ */
+struct kshark_config_doc *
+kshark_export_stream_plugins(struct kshark_data_stream *stream,
+			     enum kshark_config_formats format)
+{
+	struct kshark_config_doc *conf =
+		kshark_config_new("kshark.config.plugins", KS_CONFIG_JSON);
+
+	if (!conf)
+		return NULL;
+
+	switch (format) {
+	case KS_CONFIG_JSON:
+		kshark_stream_plugins_to_json(stream, conf->conf_doc);
+		return conf;
+
+	default:
+		fprintf(stderr, "Document format %d not supported\n",
+			conf->format);
+		return NULL;
+	}
+}
+
+static bool kshark_stream_plugins_from_json(struct kshark_context *kshark_ctx,
+					    struct kshark_data_stream *stream,
+					    struct json_object *jobj)
+{
+	struct json_object *jlist, *jplg, *jname, *jstatus;
+	struct kshark_plugin_list *plugin;
+	struct kshark_dpi_list *dpi_list;
+	struct kshark_dpi *dpi;
+	int i, n_plugins;
+	bool active;
+
+	jplg = jname = jstatus = NULL;
+
+	if (!kshark_ctx || !stream || !jobj)
+		return false;
+
+	if (!kshark_json_type_check(jobj, "kshark.config.plugins") ||
+	    !json_object_object_get_ex(jobj, "registered", &jlist) ||
+	    json_object_get_type(jlist) != json_type_array)
+		goto fail;
+
+	n_plugins = json_object_array_length(jlist);
+	for (i = 0; i < n_plugins; ++i) {
+		jplg = json_object_array_get_idx(jlist, i);
+		if (!jplg ||
+		    json_object_get_type(jplg) != json_type_array ||
+		    json_object_array_length(jplg) != 2)
+			goto fail;
+
+		jname = json_object_array_get_idx(jplg, 0);
+		jstatus = json_object_array_get_idx(jplg, 1);
+		if (!jname || !jstatus)
+			goto fail;
+
+		plugin = kshark_find_plugin_by_name(kshark_ctx->plugins,
+						    json_object_get_string(jname));
+
+		if (plugin) {
+			active = json_object_get_boolean(jstatus);
+			dpi = plugin->process_interface;
+			dpi_list = kshark_register_plugin_to_stream(stream, dpi,
+								    active);
+
+			kshark_handle_dpi(stream, dpi_list, KSHARK_PLUGIN_INIT);
+		}
+	}
+
+	return true;
+
+ fail:
+	json_object_put(jplg);
+	json_object_put(jlist);
+	return false;
+}
+
+/**
+ * @brief Load the list of registered plugins for a given Data
+ *	  stream from a Configuration document.
+ *
+ * @param kshark_ctx: Input location for session context pointer.
+ * @param conf: Input location for the kshark_config_doc instance. Currently
+ *		only Json format is supported.
+ *
+ * @returns True, if plugins have been loaded. If the configuration
+ *	    document contains no data or in a case of an error, the function
+ *	    returns False.
+ */
+bool kshark_import_stream_plugins(struct kshark_context *kshark_ctx,
+				  struct kshark_data_stream *stream,
+				  struct kshark_config_doc *conf)
+{
+	switch (conf->format) {
+	case KS_CONFIG_JSON:
+		return kshark_stream_plugins_from_json(kshark_ctx, stream,
+						       conf->conf_doc);
 
 	default:
 		fprintf(stderr, "Document format %d not supported\n",
@@ -1878,27 +2104,26 @@ kshark_export_dstream(struct kshark_context *kshark_ctx, int sd,
 {
 	struct kshark_data_stream *stream =
 		kshark_get_data_stream(kshark_ctx, sd);
-	struct kshark_config_doc *file_conf, *filter_conf, *sd_conf;
+	struct kshark_config_doc *file_conf, *filter_conf, *sd_conf, *plg_conf;
 	struct kshark_config_doc *dstream_conf;
-	char *sd_str;
-	int ret;
 
 	/*  Create new Configuration documents. */
 	dstream_conf = kshark_stream_config_new(format);
-	sd_conf = kshark_string_config_alloc();
+	sd_conf = kshark_config_alloc(KS_CONFIG_JSON);
 
-	ret = asprintf(&sd_str, "%i", sd);
-	sd_conf->conf_doc = sd_str;
+	sd_conf->conf_doc = json_object_new_int(sd);
 
 	filter_conf = kshark_export_all_filters(kshark_ctx, sd, format);
 	file_conf = kshark_export_trace_file(stream->file, format);
+	plg_conf = kshark_export_stream_plugins(stream, format);
 
-	if (!sd_conf || ret <= 0 || !dstream_conf || !filter_conf || !file_conf)
+	if (!sd_conf || !dstream_conf || !filter_conf || !file_conf)
 		goto fail;
 
 	kshark_config_doc_add(dstream_conf, "stream id", sd_conf);
 	kshark_config_doc_add(dstream_conf, "data", file_conf);
 	kshark_config_doc_add(dstream_conf, "filters", filter_conf);
+	kshark_config_doc_add(dstream_conf, "plugins", plg_conf);
 
 	if (stream->calib_array_size)
 		kshark_export_calib_array(kshark_ctx, sd, &dstream_conf);
@@ -1906,9 +2131,11 @@ kshark_export_dstream(struct kshark_context *kshark_ctx, int sd,
 	return dstream_conf;
 
  fail:
-	free(dstream_conf);
-	free(filter_conf);
-	free(file_conf);
+	kshark_free_config_doc(dstream_conf);
+	kshark_free_config_doc(filter_conf);
+	kshark_free_config_doc(file_conf);
+	kshark_free_config_doc(plg_conf);
+	kshark_free_config_doc(sd_conf);
 
 	return NULL;
 }
@@ -1928,7 +2155,8 @@ kshark_export_dstream(struct kshark_context *kshark_ctx, int sd,
 int kshark_import_dstream(struct kshark_context *kshark_ctx,
 			  struct kshark_config_doc *conf)
 {
-	struct kshark_config_doc *file_conf, *filter_conf;
+	struct kshark_config_doc *file_conf, *filter_conf, *plg_conf;
+	struct kshark_data_stream *stream;
 	bool ret = false;
 	int sd = -EFAULT;
 
@@ -1937,25 +2165,40 @@ int kshark_import_dstream(struct kshark_context *kshark_ctx,
 
 	file_conf = kshark_config_alloc(KS_CONFIG_JSON);
 	filter_conf = kshark_config_alloc(KS_CONFIG_JSON);
-	if (!file_conf || !file_conf) {
-		fprintf(stderr, "Failed to allocate memory for Json document.\n");
+	plg_conf = kshark_config_alloc(KS_CONFIG_JSON);
+	if (!file_conf || !filter_conf || !plg_conf) {
+		fprintf(stderr,
+			"Failed to allocate memory for Json document.\n");
 		goto free;
 	}
 
-	if (file_conf && filter_conf &&
-	    kshark_config_doc_get(conf, "data", file_conf) &&
-	    kshark_config_doc_get(conf, "filters", filter_conf)) {
+	if (kshark_config_doc_get(conf, "data", file_conf) &&
+	    kshark_config_doc_get(conf, "filters", filter_conf) &&
+	    kshark_config_doc_get(conf, "plugins", plg_conf)) {
 		sd = kshark_import_trace_file(kshark_ctx, file_conf);
 		if (sd < 0) {
-			fprintf(stderr, "Failed to import data file form Json document.\n");
+			fprintf(stderr,
+				"Failed to import data file form Json document.\n");
 			goto free;
 		}
 
+		stream = kshark_ctx->stream[sd];
 		kshark_import_calib_array(kshark_ctx, sd, conf);
 		ret = kshark_import_all_filters(kshark_ctx, sd,
 						filter_conf);
 		if (!ret) {
-			fprintf(stderr, "Failed to import filters form Json document.\n");
+			fprintf(stderr,
+				"Failed to import filters form Json document.\n");
+			kshark_close(kshark_ctx, sd);
+			sd = -EFAULT;
+			goto free;
+		}
+
+		ret = kshark_import_stream_plugins(kshark_ctx, stream, plg_conf);
+
+		if (!ret) {
+			fprintf(stderr,
+				"Failed to import stream plugins form Json document.\n");
 			kshark_close(kshark_ctx, sd);
 			sd = -EFAULT;
 			goto free;
@@ -1963,8 +2206,10 @@ int kshark_import_dstream(struct kshark_context *kshark_ctx,
 	}
 
  free:
+	/* Free only the kshark_config_doc objects. */
 	free(file_conf);
 	free(filter_conf);
+	free(plg_conf);
 
 	return sd;
 }
@@ -1977,6 +2222,7 @@ kshark_export_all_dstreams_to_json(struct kshark_context *kshark_ctx,
 	struct kshark_config_doc *dstream_conf;
 	struct json_object *jall_streams;
 
+	json_del_if_exist(jobj, KS_DSTREAMS_NAME);
 	jall_streams = json_object_new_array();
 
 	for (int i = 0; i < kshark_ctx->n_streams; ++i) {
@@ -1991,12 +2237,15 @@ kshark_export_all_dstreams_to_json(struct kshark_context *kshark_ctx,
 		free(dstream_conf);
 	}
 
-	json_object_object_add(jobj, "data streams", jall_streams);
+	free(stream_ids);
+
+	json_object_object_add(jobj, KS_DSTREAMS_NAME, jall_streams);
 
 	return true;
 
  fail:
 	json_object_put(jall_streams);
+	free(stream_ids);
 
 	return false;
 }
@@ -2042,7 +2291,7 @@ kshark_import_all_dstreams_from_json(struct kshark_context *kshark_ctx,
 	json_object *jall_streams, *jstream;
 	int sd, i, length;
 
-	if (!json_object_object_get_ex(jobj, "data streams", &jall_streams) ||
+	if (!json_object_object_get_ex(jobj, KS_DSTREAMS_NAME, &jall_streams) ||
 	    json_object_get_type(jall_streams) != json_type_array)
 		return -EFAULT;
 

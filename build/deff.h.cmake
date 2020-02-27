@@ -32,10 +32,8 @@
 
 	/**
 	 * String containing semicolon-separated list of plugin names.
-	 * The plugins to be loaded when KernelShark starts are tagged
-	 * with "default".
 	 */
-	const QString plugins = "@PLUGINS@";
+	const QString supportedPlugins = "@PLUGINS@";
 
 #endif /* __cplusplus */
 

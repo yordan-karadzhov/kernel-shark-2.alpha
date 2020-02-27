@@ -94,7 +94,7 @@ void KsVCPUCheckBoxWidget::update(int sdHost, VCPUVector vcpus)
 	setDefault(false);
 }
 
-#define DIALOG_NAME "KVM Combo plots"
+#define DIALOG_NAME	"KVM Combo plots"
 
 #define LABEL_WIDTH	(FONT_WIDTH * 50)
 
@@ -205,7 +205,8 @@ void KsComboPlotDialog::update(int sdHost, VCPUVector vcpus)
 void KsComboPlotDialog::_applyPress()
 {
 	QVector<int> cbVec = _vcpuTree.getCheckedIds();
-	QVector<int> combo(4), allCombos;
+	QVector<int> allCombosVec;
+	KsComboPlot combo(2);
 	int nPlots(0);
 
 	/*
@@ -215,15 +216,25 @@ void KsComboPlotDialog::_applyPress()
 	disconnect(_applyButtonConnection);
 
 	for (auto const &i: cbVec) {
-		combo[0] = _sdHost;
-		combo[1] = _vcpus.at(i).first;
-		combo[2] = _guestStreamComboBox.currentData().toInt();
-		combo[3] = _vcpus.at(i).second;
-		allCombos.append(combo);
+		allCombosVec.append(2);
+
+		combo[0]._streamId = _guestStreamComboBox.currentData().toInt();
+		combo[0]._id = _vcpus.at(i).second;
+		combo[0]._type = KsPlot::KSHARK_CPU_DRAW |
+				 KsPlot::KSHARK_GUEST_DRAW;
+
+		combo[0] >> allCombosVec;
+
+		combo[1]._streamId = _sdHost;
+		combo[1]._id = _vcpus.at(i).first;
+		combo[1]._type = KsPlot::KSHARK_TASK_DRAW |
+				 KsPlot::KSHARK_HOST_DRAW;
+
+		combo[1] >> allCombosVec;
 		++nPlots;
 	}
 
-	emit apply(nPlots, allCombos);
+	emit apply(nPlots, allCombosVec);
 }
 
 void KsComboPlotDialog::_guestStreamChanged(const QString &sdStr)

@@ -87,8 +87,8 @@ QVector<int> getPidList(int sd);
 
 QVector<int> getFilterIds(kshark_hash_id *filter);
 
-/** @brief Geat the list of plugins. */
-inline QStringList getPluginList() {return plugins.split(";");}
+/** @brief Geat the list of plugins provided by the package. */
+inline QStringList getPluginList() {return supportedPlugins.split(";");}
 
 void listFilterSync(bool state);
 
@@ -173,7 +173,8 @@ public:
 
 	~KsDataStore();
 
-	int loadDataFile(const QString &file);
+	int loadDataFile(const QString &file,
+			 QVector<kshark_dpi *> plugins);
 
 	int appendDataFile(const QString &file, int64_t shift);
 
@@ -243,79 +244,40 @@ class KsPluginManager : public QObject
 public:
 	explicit KsPluginManager(QWidget *parent = nullptr);
 
-	 ~KsPluginManager();
+	QStringList getPluginList() const;
 
-	/** A list of available built-in plugins. */
-	QStringList			_ksPluginList;
+	QStringList getStreamPluginList(int sd) const;
 
-	/** A lists of registered built-in plugins per stream. */
-	KsPluginMap		_registeredKsPlugins;
+	QVector<int> getActivePlugins(int sd) const;
 
-	/** A list of available user plugins. */
-	QStringList			_userPluginList;
+	QVector<int> getPluginsByStatus(int sd, int status) const;
 
-	/** A lists of registered user plugins per stream. */
-	KsPluginMap		_registeredUserPlugins;
+	const QVector<kshark_plugin_list *>
+	getUserDataPlugins() const {return _userPlugins;}
 
 	void registerPluginMenues();
 
-	void registerPlugin(const QString &plugin);
+	void updatePlugins(int sd, QVector<int> pluginStates);
 
-	void unregisterPlugin(const QString &plugin);
+	void addPlugins(const QStringList &fileNames, QVector<int> streams);
 
-	void addPlugins(const QStringList &fileNames);
+	void registerPlugins(const QString &pluginNames);
 
-	void addStream(int sd)
-	{
-		_registeredKsPlugins[sd] = _registeredKsPlugins[-1];
-		_registeredUserPlugins[sd] = _registeredUserPlugins[-1];
-	}
-
-	void updatePlugins(int sd, QVector<int> pluginId);
-
-	QStringList getPluginList() const
-	{
-		QStringList list;
-		list << _userPluginList << _ksPluginList;
-		return list;
-	}
-
-	QVector<int> getRegisteredPlugins(int sd) const
-	{
-		QVector<int> v;
-		v << _registeredUserPlugins[sd] << _registeredKsPlugins[sd];
-		qInfo() << sd << "RegisteredPlugins:" << v;
-		return v;
-	}
-
-	void unloadAll() {qInfo() << "KsPluginManager::unloadAll is not implemented !!!";}
+	void unregisterPlugins(const QString &pluginNames);
 
 signals:
 	/** This signal is emitted when a plugin is loaded or unloaded. */
 	void dataReload();
 
 private:
-	void _parsePluginList();
+	QVector<kshark_plugin_list *>	_userPlugins;
 
-	void _registerFromList(kshark_context *kshark_ctx);
+	QVector<kshark_plugin_list *>
+	_loadPluginList(const QStringList &plugins);
 
-	void _unregisterFromList(kshark_context *kshark_ctx);
+	std::string _pluginLibFromName(const QString &plugin);
 
-	char *_pluginLibFromName(const QString &plugin, int &n);
-
-	template <class T>
-	void _forEachInList(const QStringList &pl,
-			    const QVector<bool> &reg,
-			    T action)
-	{
-		int nPlugins;
-		nPlugins = pl.count();
-		for (int i = 0; i < nPlugins; ++i) {
-			if (reg[i]) {
-				action(pl[i]);
-			}
-		}
-	}
+	std::string _pluginNameFromLib(const QString &plugin);
 };
 
 KsPlot::Color& operator <<(KsPlot::Color &thisColor, const QColor &c);

@@ -21,7 +21,6 @@
 // KernelShark
 #include "libkshark.h"
 #include "libkshark-plugin.h"
-#include "libkshark-input.h"
 #include "libkshark-tepdata.h"
 
 static struct kshark_context *kshark_context_handler = NULL;
@@ -37,9 +36,7 @@ static bool kshark_default_context(struct kshark_context **context)
 	kshark_ctx->stream = calloc(KS_MAX_NUM_STREAMS,
 				    sizeof(*kshark_ctx->stream));
 
-	kshark_ctx->event_handlers = NULL;
 	kshark_ctx->collections = NULL;
-	kshark_ctx->plugins = NULL;
 	kshark_ctx->inputs = NULL;
 
 	kshark_ctx->filter_mask = 0x0;
@@ -105,7 +102,6 @@ bool kshark_instance(struct kshark_context **kshark_ctx)
  */
 int kshark_open(struct kshark_context *kshark_ctx, const char *file)
 {
-	struct kshark_plugin_list *plugin;
 	int sd, rt;
 
 	sd = kshark_add_stream(kshark_ctx);
@@ -117,11 +113,6 @@ int kshark_open(struct kshark_context *kshark_ctx, const char *file)
 		return rt;
 
 	kshark_ctx->n_streams++;
-
-	for (plugin = kshark_ctx->plugins; plugin; plugin = plugin->next)
-		kshark_plugin_add_stream(plugin, sd);
-
-	kshark_handle_all_plugins(kshark_ctx, sd, KSHARK_PLUGIN_INIT);
 
 	return sd;
 }
@@ -154,6 +145,9 @@ static struct kshark_data_stream *kshark_stream_alloc()
 	stream = calloc(1, sizeof(*stream));
 	if (!stream)
 		goto fail;
+
+	stream->event_handlers = NULL;
+	stream->plugins = NULL;
 
 	stream->show_task_filter = kshark_hash_id_alloc(KS_FILTER_HASH_NBITS);
 	stream->hide_task_filter = kshark_hash_id_alloc(KS_FILTER_HASH_NBITS);
@@ -220,7 +214,7 @@ static void set_format(struct kshark_context *kshark_ctx,
 		       struct kshark_data_stream *stream,
 		       const char *filename)
 {
-	struct kshark_input_list *input;
+	struct kshark_dri_list *input;
 
 	stream->format = KS_INVALIDE_DATA;
 
@@ -230,9 +224,9 @@ static void set_format(struct kshark_context *kshark_ctx,
 	}
 
 	for (input = kshark_ctx->inputs; input; input = input->next) {
-		stream->format = input->check_data(filename);
+		stream->format = input->interface->check_data(filename);
 		if (stream->format != KS_INVALIDE_DATA) {
-			input->format = stream->format;
+			input->interface->format = stream->format;
 			return;
 		}
 	}
@@ -250,7 +244,7 @@ static void set_format(struct kshark_context *kshark_ctx,
 int kshark_stream_open(struct kshark_data_stream *stream, const char *file)
 {
 	struct kshark_context *kshark_ctx = NULL;
-	struct kshark_input_list *input;
+	struct kshark_dri_list *input;
 
 	if (!stream || !kshark_instance(&kshark_ctx))
 		return -EFAULT;
@@ -267,8 +261,8 @@ int kshark_stream_open(struct kshark_data_stream *stream, const char *file)
 
 	default:
 		for (input = kshark_ctx->inputs; input; input = input->next) {
-			if (stream->format == input->format)
-				return input->init(stream);
+			if (stream->format == input->interface->format)
+				return input->interface->init(stream);
 		}
 
 		return -ENODATA;
@@ -303,7 +297,7 @@ int *kshark_all_streams(struct kshark_context *kshark_ctx)
 static void kshark_stream_close(struct kshark_data_stream *stream)
 {
 	struct kshark_context *kshark_ctx = NULL;
-	struct kshark_input_list *input;
+	struct kshark_dri_list *input;
 
 	if (!stream || !kshark_instance(&kshark_ctx))
 		return;
@@ -326,8 +320,8 @@ static void kshark_stream_close(struct kshark_data_stream *stream)
 
 	default:
 		for (input = kshark_ctx->inputs; input; input = input->next) {
-			if (stream->format == input->format)
-				input->close(stream);
+			if (stream->format == input->interface->format)
+				input->interface->close(stream);
 		}
 
 		break;
@@ -357,7 +351,11 @@ void kshark_close(struct kshark_context *kshark_ctx, int sd)
 	kshark_unregister_stream_collections(&kshark_ctx->collections, sd);
 
 	/* Close all active plugins for this stream. */
-	kshark_handle_all_plugins(kshark_ctx, sd, KSHARK_PLUGIN_CLOSE);
+	if (stream->plugins) {
+		kshark_handle_all_dpis(stream, KSHARK_PLUGIN_CLOSE);
+		kshark_free_event_handler_list(stream->event_handlers);
+		kshark_free_dpi_list(stream->plugins);
+	}
 
 	kshark_stream_close(stream);
 	kshark_stream_free(stream);
@@ -410,12 +408,10 @@ void kshark_free(struct kshark_context *kshark_ctx)
 
 	free(kshark_ctx->stream);
 
-	if (kshark_ctx->plugins) {
+	if (kshark_ctx->plugins)
 		kshark_free_plugin_list(kshark_ctx->plugins);
-		kshark_free_event_handler_list(kshark_ctx->event_handlers);
-	}
 
-	kshark_free_input_list(kshark_ctx->inputs);
+	kshark_free_dri_list(kshark_ctx->inputs);
 
 	if (kshark_ctx == kshark_context_handler)
 		kshark_context_handler = NULL;
@@ -822,23 +818,21 @@ void kshark_clear_all_filters(struct kshark_context *kshark_ctx,
  * @param record: Input location for the trace record.
  * @param entry: Output location for entry.
  */
-void kshark_postprocess_entry(struct kshark_context *kshark_ctx,
-			      struct kshark_data_stream *stream,
+void kshark_postprocess_entry(struct kshark_data_stream *stream,
 			      void *record, struct kshark_entry *entry)
 {
-	if (stream && stream->calib && stream->calib_array) {
+	if (stream->calib && stream->calib_array) {
 		/* Calibrate the timestamp of the entry. */
 		stream->calib(entry, stream->calib_array);
 	}
 
-	if (kshark_ctx &&  kshark_ctx->event_handlers) {
+	if (stream->event_handlers) {
 		/* Execute all plugin-provided actions for this event (if any). */
-		struct kshark_event_handler *evt_handler = kshark_ctx->event_handlers;
+		struct kshark_event_proc_handler *evt_handler = stream->event_handlers;
 
 		while ((evt_handler = kshark_find_event_handler(evt_handler,
-								entry->event_id,
-								entry->stream_id))) {
-			evt_handler->event_func(kshark_ctx, record, entry);
+								entry->event_id))) {
+			evt_handler->event_func(stream, record, entry);
 			evt_handler = evt_handler->next;
 			entry->visible &= ~KS_PLUGIN_UNTOUCHED_MASK;
 		}
@@ -854,15 +848,15 @@ void kshark_postprocess_entry(struct kshark_context *kshark_ctx,
  * @param h: Array index specifying the upper edge of the range to search in.
  *
  * @returns On success, the first kshark_entry inside the range, having a
-	    timestamp equal or bigger than "time".
-	    If all entries inside the range have timestamps greater than "time"
-	    the function returns BSEARCH_ALL_GREATER (negative value).
-	    If all entries inside the range have timestamps smaller than "time"
-	    the function returns BSEARCH_ALL_SMALLER (negative value).
+ *	    timestamp equal or bigger than "time".
+ *	    If all entries inside the range have timestamps greater than "time"
+ *	    the function returns BSEARCH_ALL_GREATER (negative value).
+ *	    If all entries inside the range have timestamps smaller than "time"
+ *	    the function returns BSEARCH_ALL_SMALLER (negative value).
  */
 ssize_t kshark_find_entry_by_time(uint64_t time,
-				 struct kshark_entry **data,
-				 size_t l, size_t h)
+				  struct kshark_entry **data,
+				  size_t l, size_t h)
 {
 	size_t mid;
 

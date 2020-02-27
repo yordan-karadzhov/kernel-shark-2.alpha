@@ -162,9 +162,7 @@ struct kshark_data_stream_interface {
 	/** Method used to retrieve Id of the Event from its name. */
 	stream_find_id_func	find_event_id;
 
-	/**
-	 * Method used to retrieve an arrays containing the Ids of all Events.
-	 */
+	/** Method used to retrieve the arrays of Ids of all Events. */
 	stream_get_ids_func	get_all_event_ids;
 
 	/** Method used to dump the entry's content to string. */
@@ -196,6 +194,9 @@ struct kshark_data_stream {
 	 */
 	int 			n_events;
 
+	/* The Process Id of the Idle task. */
+	int			idle_pid;
+
 	/** Trace data file pathname. */
 	char			*file;
 
@@ -207,9 +208,6 @@ struct kshark_data_stream {
 
 	/** The size of the array of time calibration constants. */
 	size_t			calib_array_size;
-
-	/** The interface of methods used to operate over the data from a given stream. */
-	struct kshark_data_stream_interface	interface;
 
 	/** Hash table of task PIDs. */
 	struct kshark_hash_id	*tasks;
@@ -235,8 +233,26 @@ struct kshark_data_stream {
 	/** Hash of CPUs to not display. */
 	struct kshark_hash_id	*hide_cpu_filter;
 
+	/** List of Plugin interfaces. */
+	struct kshark_dpi_list	*plugins;
+
+	/** The number of plugins registered for this stream.*/
+	int			n_plugins;
+
 	/** The type of the data. */
-	enum kshark_data_format	format;
+	enum kshark_data_format		format;
+
+	/** List of Plugin's Event handlers. */
+	struct kshark_event_proc_handler	*event_handlers;
+
+	/** List of Plugin's Draw handlers. */
+	struct kshark_draw_handler		*draw_handlers;
+
+	/**
+	 * The interface of methods used to operate over the data from a given
+	 * stream.
+	 */
+	struct kshark_data_stream_interface	interface;
 };
 
 /** Hard-coded maximum number of data stream. */
@@ -258,16 +274,19 @@ struct kshark_context {
 	uint8_t				filter_mask;
 
 	/** List of Data collections. */
-	struct kshark_entry_collection *collections;
+	struct kshark_entry_collection	*collections;
+
+	/** List of data readout interfaces. */
+	struct kshark_dri_list		*inputs;
+
+	/** The number of readout interfaces. */
+	int				n_inputs;
 
 	/** List of Plugins. */
 	struct kshark_plugin_list	*plugins;
 
-	/** List of user data inputs. */
-	struct kshark_input_list	*inputs;
-
-	/** List of Plugin Event handlers. */
-	struct kshark_event_handler	*event_handlers;
+	/** The number of plugins. */
+	int				n_plugins;
 };
 
 bool kshark_instance(struct kshark_context **kshark_ctx);
@@ -336,7 +355,7 @@ static inline int kshark_get_event_id(const struct kshark_entry *entry)
 
 	return stream->interface.get_event_id(stream, entry);
 }
-
+#include <stdio.h>
 static inline int *kshark_get_all_event_ids(struct kshark_data_stream *stream)
 {
 	return stream->interface.get_all_event_ids(stream);
@@ -551,8 +570,7 @@ void kshark_clear_all_filters(struct kshark_context *kshark_ctx,
 			      struct kshark_entry **data,
 			      size_t n_entries);
 
-void kshark_postprocess_entry(struct kshark_context *kshark_ctx,
-			      struct kshark_data_stream *stream,
+void kshark_postprocess_entry(struct kshark_data_stream *stream,
 			      void *record, struct kshark_entry *entry);
 
 /** Search failed identifiers. */
@@ -896,6 +914,12 @@ enum kshark_config_formats {
  */
 #define KS_DATA_SOURCE_NAME		"trace data"
 
+/**
+ * Field name for the Configuration document describing all currently loaded
+ * data streams.
+ */
+#define KS_DSTREAMS_NAME		"data streams"
+
 struct kshark_config_doc *
 kshark_config_alloc(enum kshark_config_formats);
 
@@ -938,11 +962,23 @@ int kshark_import_trace_file(struct kshark_context *kshark_ctx,
 			     struct kshark_config_doc *conf);
 
 struct kshark_config_doc *
-kshark_export_user_inputs(struct kshark_context *kshark_ctx,
+kshark_export_plugin_file(struct kshark_plugin_list *plugin,
 			  enum kshark_config_formats format);
 
-bool kshark_import_user_inputs(struct kshark_context *kshark_ctx,
+struct kshark_config_doc *
+kshark_export_all_plugins(struct kshark_context *kshark_ctx,
+			  enum kshark_config_formats format);
+
+bool kshark_import_all_plugins(struct kshark_context *kshark_ctx,
 			       struct kshark_config_doc *conf);
+
+struct kshark_config_doc *
+kshark_export_stream_plugins(struct kshark_data_stream *stream,
+			     enum kshark_config_formats format);
+
+bool kshark_import_stream_plugins(struct kshark_context *kshark_ctx,
+				  struct kshark_data_stream *stream,
+				  struct kshark_config_doc *conf);
 
 struct kshark_config_doc *
 kshark_export_model(struct kshark_trace_histo *histo,

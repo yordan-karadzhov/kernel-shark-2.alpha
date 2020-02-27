@@ -406,11 +406,9 @@ KsDataStore::~KsDataStore()
 int KsDataStore::_openDataFile(kshark_context *kshark_ctx,
 				const QString &file)
 {
-	int sd;
-
-	sd = kshark_open(kshark_ctx, file.toStdString().c_str());
+	int sd = kshark_open(kshark_ctx, file.toStdString().c_str());
 	if (sd < 0) {
-		qCritical() << "ERROR" << sd << "while loading file " << file;
+		qCritical() << "ERROR:" << sd << "while loading file " << file;
 		return sd;
 	}
 
@@ -418,9 +416,11 @@ int KsDataStore::_openDataFile(kshark_context *kshark_ctx,
 }
 
 /** Load trace data for file. */
-int  KsDataStore::loadDataFile(const QString &file)
+int  KsDataStore::loadDataFile(const QString &file,
+			       QVector<kshark_dpi *> plugins)
 {
 	kshark_context *kshark_ctx(nullptr);
+	kshark_data_stream *stream;
 	ssize_t n;
 	int sd;
 
@@ -432,6 +432,17 @@ int  KsDataStore::loadDataFile(const QString &file)
 	kshark_close_all(kshark_ctx);
 
 	sd = _openDataFile(kshark_ctx, file);
+	if (sd < 0)
+		return sd;
+
+	stream = kshark_ctx->stream[sd];
+	for (auto const &p: plugins) {
+		struct kshark_dpi_list *plugin;
+
+		plugin = kshark_register_plugin_to_stream(stream, p, true);
+		kshark_handle_dpi(stream, plugin, KSHARK_PLUGIN_INIT);
+	}
+
 	n = kshark_load_entries(kshark_ctx, sd, &_rows);
 	if (n < 0) {
 		kshark_close(kshark_ctx, sd);
@@ -455,7 +466,7 @@ int  KsDataStore::loadDataFile(const QString &file)
 int KsDataStore::appendDataFile(const QString &file, int64_t offset)
 {
 	kshark_context *kshark_ctx(nullptr);
-	struct kshark_entry **apndRows = NULL;
+	struct kshark_entry **apndRows = nullptr;
 	struct kshark_entry **mergedRows;
 	ssize_t nApnd = 0;
 	int sd;
@@ -795,261 +806,226 @@ void KsDataStore::setClockOffset(int sd, int64_t offset)
 KsPluginManager::KsPluginManager(QWidget *parent)
 : QObject(parent)
 {
-	kshark_context *kshark_ctx(nullptr);
-	_parsePluginList();
-
-	if (!kshark_instance(&kshark_ctx))
-		return;
-
-	_registerFromList(kshark_ctx);
+	_loadPluginList(KsUtils::getPluginList());
 }
 
-KsPluginManager::~KsPluginManager()
+QVector<kshark_plugin_list *>
+KsPluginManager::_loadPluginList(const QStringList &plugins)
 {
 	kshark_context *kshark_ctx(nullptr);
+	QVector<kshark_plugin_list *> vec;
+	kshark_plugin_list *plugin;
+	std::string name, lib;
+	int nPlugins;
 
 	if (!kshark_instance(&kshark_ctx))
-		return;
+		return vec;
 
-	_unregisterFromList(kshark_ctx);
-}
-
-/** Parse the plugin list declared in the CMake-generated header file. */
-void KsPluginManager::_parsePluginList()
-{
-	kshark_context *kshark_ctx(nullptr);
-	int nPlugins, *streamIds;
-
-	if (!kshark_instance(&kshark_ctx))
-		return;
-
-	streamIds = kshark_all_streams(kshark_ctx);
-	_ksPluginList = KsUtils::getPluginList();
-	nPlugins = _ksPluginList.count();
-	_registeredKsPlugins[-1].resize(nPlugins);
-
+	nPlugins = plugins.count();
 	for (int i = 0; i < nPlugins; ++i) {
-		if (_ksPluginList[i].contains(" default", Qt::CaseInsensitive)) {
-			_ksPluginList[i].remove(" default",
-						Qt::CaseInsensitive);
-			_registeredKsPlugins[-1][i] = true;
+		if (plugins[i].endsWith(".so")) {
+			lib = plugins[i].toStdString();
+			name = _pluginNameFromLib(plugins[i]);
 		} else {
-			_registeredKsPlugins[-1][i] = false;
+			lib = _pluginLibFromName(plugins[i]);
+			name = plugins[i].toStdString();
+		}
+
+		plugin = kshark_find_plugin(kshark_ctx->plugins,
+					    lib.c_str());
+
+		if (!plugin) {
+			plugin = kshark_register_plugin(kshark_ctx,
+							name.c_str(),
+							lib.c_str());
+
+			if (plugin)
+				vec.append(plugin);
 		}
 	}
 
-	for (int j = 0; j < kshark_ctx->n_streams; ++j)
-		_registeredKsPlugins[streamIds[j]] = _registeredKsPlugins[-1];
-
-	free(streamIds);
+	return vec;
 }
 
-/**
- * Register the plugins by using the information in "_ksPluginList" and
- * "_registeredKsPlugins".
- */
-void KsPluginManager::_registerFromList(kshark_context *kshark_ctx)
+QStringList KsPluginManager::getPluginList() const
 {
-	auto lamRegBuiltIn = [&kshark_ctx, this](const QString &pluginStr)
-	{
-		char *lib;
-		int n;
+	kshark_context *kshark_ctx(nullptr);
+	kshark_plugin_list *plugin;
+	QStringList list;
 
-		lib = _pluginLibFromName(pluginStr, n);
-		if (n <= 0)
-			return;
+	if (!kshark_instance(&kshark_ctx))
+		return {};
 
-		qInfo() << "reg" << lib;
-		kshark_register_plugin(kshark_ctx, lib);
+	plugin = kshark_ctx->plugins;
+	while (plugin) {
+		list.append(plugin->file);
+		plugin = plugin->next;
+	}
 
-		free(lib);
-	};
-
-	auto lamRegUser = [&kshark_ctx](const QString &pluginStr)
-	{
-		std::string lib = pluginStr.toStdString();
-		kshark_register_plugin(kshark_ctx, lib.c_str());
-	};
-
-	/*
-	 * We want the order inside the list to be the same as in the vector,
-	 * but we always add to the beginning of the list. This mean that we
-	 * need a reverse loop.
-	 */
-	auto reverse = [] (QStringList l) {
-		QStringList r = l;
-		std::reverse(r.begin(), r.end());
-		return r;
-	};
-
-	for (auto const &p: reverse(_ksPluginList))
-		lamRegBuiltIn(p);
-
-	for (auto const &p: reverse(_userPluginList))
-		lamRegUser(p);
+	return list;
 }
 
-/**
- * Unegister the plugins by using the information in "_ksPluginList" and
- * "_registeredKsPlugins".
- */
-void KsPluginManager::_unregisterFromList(kshark_context *kshark_ctx)
+QStringList KsPluginManager::getStreamPluginList(int sd) const
 {
-	auto lamUregBuiltIn = [&kshark_ctx, this](const QString &plugin)
-	{
-		char *lib;
-		int n;
+	kshark_context *kshark_ctx(nullptr);
+	kshark_data_stream *stream;
+	kshark_dpi_list *plugin;
+	QStringList list;
 
-		lib = _pluginLibFromName(plugin, n);
-		if (n <= 0)
-			return;
+	if (!kshark_instance(&kshark_ctx))
+		return {};
 
-		qInfo() << "u_reg" << lib;
-		kshark_unregister_plugin(kshark_ctx, lib);
-		free(lib);
-	};
+	stream = kshark_get_data_stream(kshark_ctx, sd);
+	if (!stream)
+		return {};
 
-	auto lamUregUser = [&kshark_ctx](const QString &plugin)
-	{
-		std::string lib = plugin.toStdString();
-		kshark_unregister_plugin(kshark_ctx, lib.c_str());
-	};
+	plugin = stream->plugins;
+	while (plugin) {
+		list.append(plugin->interface->name);
+		plugin = plugin->next;
+	}
 
-	for (auto const &p: _ksPluginList)
-		lamUregBuiltIn(p);
+	return list;
+}
 
-	for (auto const &p: _userPluginList)
-		lamUregUser(p);
+QVector<int> KsPluginManager::getActivePlugins(int sd) const
+{
+	kshark_context *kshark_ctx(nullptr);
+	kshark_data_stream *stream;
+	kshark_dpi_list *plugin;
+	QVector<int> vec;
+	int i(0);
+
+	if (!kshark_instance(&kshark_ctx))
+		return {};
+
+	stream = kshark_get_data_stream(kshark_ctx, sd);
+	if (!stream)
+		return {};
+
+	plugin = stream->plugins;
+
+	while (plugin) {
+		vec.append(plugin->status & KSHARK_PLUGIN_ENABLED);
+		plugin = plugin->next;
+		i++;
+	}
+
+	return vec;
+}
+
+QVector<int> KsPluginManager::getPluginsByStatus(int sd, int status) const
+{
+	kshark_context *kshark_ctx(nullptr);
+	kshark_data_stream *stream;
+	kshark_dpi_list *plugin;
+	QVector<int> vec;
+	int i(0);
+
+	if (!kshark_instance(&kshark_ctx))
+		return {};
+
+	stream = kshark_get_data_stream(kshark_ctx, sd);
+	if (!stream)
+		return {};
+
+	plugin = stream->plugins;
+
+	while (plugin) {
+		if (plugin->status & status)
+			vec.append(i);
+
+		plugin = plugin->next;
+		i++;
+	}
+
+	return vec;
 }
 
 void KsPluginManager::registerPluginMenues()
 {
 	kshark_context *kshark_ctx(nullptr);
 	kshark_plugin_list *plugin;
-	pluginMenuFunc addMenuFunc;
-	void *funcPtr;
 
 	if (!kshark_instance(&kshark_ctx))
 		return;
 
 	for (plugin = kshark_ctx->plugins; plugin; plugin = plugin->next)
-		if (plugin->handle) {
-			funcPtr = dlsym(plugin->handle,
-					KSHARK_PLUGIN_MENU_INITIALIZER_NAME);
-
-			addMenuFunc = (pluginMenuFunc) funcPtr;
-			if (addMenuFunc)
-				addMenuFunc(parent());
-		}
+		if (plugin->handle && plugin->ctrl_interface)
+			plugin->ctrl_interface(parent());
 }
 
-char *KsPluginManager::_pluginLibFromName(const QString &plugin, int &n)
+std::string KsPluginManager::_pluginLibFromName(const QString &plugin)
 {
 	QString appPath = QCoreApplication::applicationDirPath();
 	QString libPath = appPath + "/../lib";
-	std::string pluginStr = plugin.toStdString();
-	char *lib;
+	std::string lib;
+
+	auto lamFileName = [&] () {
+		return std::string("/plugin-" + plugin.toStdString() + ".so");
+	};
 
 	libPath = QDir::cleanPath(libPath);
-	if (!KsUtils::isInstalled() && QDir(libPath).exists()) {
-		std::string pathStr = libPath.toStdString();
-		n = asprintf(&lib, "%s/plugin-%s.so",
-			     pathStr.c_str(), pluginStr.c_str());
-	} else {
-		n = asprintf(&lib, "%s/plugin-%s.so",
-			     KS_PLUGIN_INSTALL_PREFIX, pluginStr.c_str());
-	}
+	if (!KsUtils::isInstalled() && QDir(libPath).exists())
+		lib = libPath.toStdString() + lamFileName();
+	else
+		lib = std::string(KS_PLUGIN_INSTALL_PREFIX) + lamFileName();
 
 	return lib;
+}
+
+std::string KsPluginManager::_pluginNameFromLib(const QString &plugin)
+{
+	QString name = plugin.section('/', -1);
+	name.remove("plugin-");
+	name.remove(".so");
+
+	return name.toStdString();
 }
 
 /**
  * @brief Register a Plugin.
  *
  * @param plugin: Provide here the name of the plugin (as in the CMake-generated
- *		  header file) of a name of the plugin's library file (.so).
+ *		  header file) or a name of the plugin's library file (.so
+ *		  including path).
  */
-void KsPluginManager::registerPlugin(const QString &plugin)
+void KsPluginManager::registerPlugins(const QString &pluginNames)
 {
-	kshark_context *kshark_ctx(nullptr);
-	int *streamIds;
-
-	if (!kshark_instance(&kshark_ctx))
-		return;
-
-	streamIds = kshark_all_streams(kshark_ctx);
-
-	if (plugin.endsWith(".so") && QFileInfo::exists(plugin)) {
-		std::string pluginStr = plugin.toStdString();
-		struct kshark_plugin_list *pluginPtr =
-			kshark_register_plugin(kshark_ctx, pluginStr.c_str());
-
-		_userPluginList.prepend(plugin);
-
-		_registeredUserPlugins[-1].prepend(true);
-		for (int i = 0; i < kshark_ctx->n_streams; ++i) {
-			_registeredUserPlugins[streamIds[i]].prepend(true);
-			kshark_plugin_add_stream(pluginPtr, streamIds[i]);
-		}
-	} else {
-		qCritical() << "ERROR: " << plugin << "cannot be registered!";
-	}
-
-	free(streamIds);
+	_userPlugins.append(_loadPluginList(pluginNames.split(' ')));
 }
 
-/** @brief Unregister a Built in KernelShark plugin.
- *<br>
- * WARNING: Do not use this function to unregister User plugins.
- * Instead use directly kshark_unregister_plugin().
+/**
+ * @brief Unregister a list pf plugins.
  *
- * @param plugin: Provide here the name of the plugin (as in the CMake-generated
- *		  header file) or the name of the plugin's library file (.so).
- *
+ * @param pluginNames: Provide here a space separated list of plugin names (as
+ *		       in the CMake-generated header file).
  */
-void KsPluginManager::unregisterPlugin(const QString &plugin)
+void KsPluginManager::unregisterPlugins(const QString &pluginNames)
 {
 	kshark_context *kshark_ctx(nullptr);
-	char *lib;
-	int n;
+	kshark_plugin_list *plugin;
+	kshark_data_stream *stream;
+	int *streamArray;
 
 	if (!kshark_instance(&kshark_ctx))
 		return;
 
-	auto lamUnreg = [&] (int i) {
-		int *streamIds = kshark_all_streams(kshark_ctx);
+	for (auto const &name: pluginNames.split(' ')) {
+		plugin = kshark_find_plugin_by_name(kshark_ctx->plugins,
+						    name.toStdString().c_str());
 
-		kshark_unregister_plugin(kshark_ctx, lib);
-		for (int j = 0; j < kshark_ctx->n_streams; ++j)
-			_registeredKsPlugins[streamIds[j]][i] = false;
-
-		free(streamIds);
-		free(lib);
-	};
-
-	for (int i = 0; i < _ksPluginList.count(); ++i) {
-		if (_ksPluginList[i] == plugin) {
-			/*
-			 * The argument is the name of the plugin. From the
-			 * name get the library .so file.
-			 */
-			lib = _pluginLibFromName(plugin, n);
-			if (n > 0)
-				lamUnreg(i);
-
-			return;
-
-		} else if (plugin.contains("/lib/plugin-" + _ksPluginList[i],
-					   Qt::CaseInsensitive)) {
-			/*
-			 * The argument is the name of the library .so file.
-			 */
-			n = asprintf(&lib, "%s", plugin.toStdString().c_str());
-			if (n > 0)
-				lamUnreg(i);
-
-			return;
+		streamArray = kshark_all_streams(kshark_ctx);
+		for  (int i = 0; i < kshark_ctx->n_streams; ++i) {
+			stream = kshark_get_data_stream(kshark_ctx,
+							streamArray[i]);
+			kshark_unregister_plugin_from_stream(stream,
+							     plugin->process_interface);
 		}
+
+		kshark_unregister_plugin(kshark_ctx,
+					 name.toStdString().c_str(),
+					 plugin->file);
 	}
 }
 
@@ -1059,28 +1035,42 @@ void KsPluginManager::unregisterPlugin(const QString &plugin)
  *
  * @param fileNames: the library files (.so) of the plugins.
 */
-void KsPluginManager::addPlugins(const QStringList &fileNames)
+void KsPluginManager::addPlugins(const QStringList &fileNames,
+				 QVector<int> streamIds)
 {
+	QVector<kshark_plugin_list *> plugins;
 	kshark_context *kshark_ctx(nullptr);
-	int *streamIds;
+	kshark_data_stream *stream;
 
 	if (!kshark_instance(&kshark_ctx))
 		return;
 
-	streamIds = kshark_all_streams(kshark_ctx);
-	for (int i = 0; i < kshark_ctx->n_streams; ++i)
-		kshark_handle_all_plugins(kshark_ctx, streamIds[i],
-					  KSHARK_PLUGIN_CLOSE);
+	plugins = _loadPluginList(fileNames);
+	_userPlugins.append(plugins);
 
-	for (auto const &p: fileNames)
-		registerPlugin(p);
+	if (streamIds.isEmpty()) {
+		int *streamArray;
 
-	for (int i = 0; i < kshark_ctx->n_streams; ++i)
-		kshark_handle_all_plugins(kshark_ctx, streamIds[i],
-					  KSHARK_PLUGIN_INIT);
+		streamIds.resize(kshark_ctx->n_streams);
+		streamArray = kshark_all_streams(kshark_ctx);
+		for  (int i = 0; i < kshark_ctx->n_streams; ++i)
+			streamIds[i] = streamArray[i];
 
-	free(streamIds);
-	emit dataReload();
+		free(streamArray);
+	}
+
+	for (int i = 0; i < streamIds.count(); ++i) {
+		stream = kshark_get_data_stream(kshark_ctx, streamIds[i]);
+
+		for (auto const &p: plugins) {
+			if (p->process_interface)
+				kshark_register_plugin_to_stream(stream,
+								 p->process_interface,
+								 true);
+		}
+
+		kshark_handle_all_dpis(stream, KSHARK_PLUGIN_UPDATE);
+	}
 }
 
 /** @brief Update (change) the plugins for a given Data stream.
@@ -1091,24 +1081,28 @@ void KsPluginManager::addPlugins(const QStringList &fileNames)
  */
 void KsPluginManager::updatePlugins(int sd, QVector<int> pluginStates)
 {
-	int nKsPlugins = _registeredKsPlugins[sd].count();
-	int nUserPlugins = pluginStates.count() - nKsPlugins;
 	kshark_context *kshark_ctx(nullptr);
-	kshark_plugin_list* plugins;
+	kshark_data_stream *stream;
+	kshark_dpi_list *plugin;
+	QVector<int> vec;
+	int i(0);
 
 	if (!kshark_instance(&kshark_ctx))
 		return;
 
-	_registeredUserPlugins[sd] = pluginStates.mid(0, nUserPlugins);
-	_registeredKsPlugins[sd] = pluginStates.mid(nUserPlugins, -1);
+	stream = kshark_get_data_stream(kshark_ctx, sd);
+	if (!stream)
+		return;
 
-	plugins = kshark_ctx->plugins;
-	for (auto state : pluginStates) {
-		if (state)
-			kshark_plugin_add_stream(plugins, sd);
+	plugin = stream->plugins;
+	while (plugin) {
+		if (pluginStates[i++])
+			plugin->status |= KSHARK_PLUGIN_ENABLED;
+		else
+			plugin->status &= ~KSHARK_PLUGIN_ENABLED;
 
-		plugins = plugins->next;
+		plugin = plugin->next;
 	}
 
-	kshark_handle_all_plugins(kshark_ctx, sd, KSHARK_PLUGIN_INIT);
+	kshark_handle_all_dpis(stream, KSHARK_PLUGIN_UPDATE);
 }

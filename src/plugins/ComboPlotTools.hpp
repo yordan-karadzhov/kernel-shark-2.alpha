@@ -13,11 +13,11 @@
 #include "KsPlugins.hpp"
 #include "KsPlotTools.hpp"
 
-static void drawVitrBridges(kshark_trace_histo *histo,
-			    KsPlot::Graph *hostGraph,
-			    int sdHost, int pidHost,
-			    int vcpuEntryId, int vcpuExitId,
-			    KsPlot::PlotObjList *shapes)
+static void drawVirt(kshark_trace_histo *histo,
+		     KsPlot::Graph *hostGraph,
+		     int sdHost, int pidHost,
+		     int vcpuEntryId, int vcpuExitId,
+		     KsPlot::PlotObjList *shapes)
 {
 	int guestBaseY = hostGraph->getBin(0)._base.y() - hostGraph->height();
 	int gapHeight = hostGraph->height() * .3;
@@ -146,18 +146,17 @@ static void drawCombos(kshark_cpp_argv *argv_c,
 {
 	KsCppArgV *argvCpp;
 
-	if (draw_action != KSHARK_PLUGIN_HOST_DRAW ||
-	    pidHost == 0)
+	if (!(draw_action & KsPlot::KSHARK_HOST_DRAW) || pidHost == 0)
 		return;
 
 	argvCpp = KS_ARGV_TO_CPP(argv_c);
 	try {
-		drawVitrBridges(argvCpp->_histo,
-				argvCpp->_graph,
-				sdHost, pidHost,
-				entryId,
-				exitId,
-				argvCpp->_shapes);
+		drawVirt(argvCpp->_histo,
+			 argvCpp->_graph,
+			 sdHost, pidHost,
+			 entryId,
+			 exitId,
+			 argvCpp->_shapes);
 	} catch (const std::exception &exc) {
 		std::cerr << "Exception in KVMCombo\n" << exc.what();
 	}

@@ -26,8 +26,6 @@
 
 // KernelShark
 #include "libkshark.h"
-#include "libkshark-input.h"
-#include "libkshark-tepdata.h"
 #include "KsCmakeDef.hpp"
 #include "KsMainWindow.hpp"
 #include "KsAdvFilteringDialog.hpp"
@@ -58,13 +56,12 @@ KsMainWindow::KsMainWindow(QWidget *parent)
   _showEventsAction("Show events", this),
   _showTasksAction("Show tasks", this),
   _showCPUsAction("Show CPUs", this),
-  _advanceFilterAction("Advance Filtering", this),
+  _advanceFilterAction("TEP Advance Filtering", this),
   _clearAllFilters("Clear all filters", this),
   _cpuSelectAction("CPUs", this),
   _taskSelectAction("Tasks", this),
-  _managePluginsAction("Manage plugins", this),
+  _managePluginsAction("Manage Plotting plugins", this),
   _addPluginsAction("Add plugins", this),
-  _addUserInputAction("Add User input", this),
   _captureAction("Record", this),
   _addOffcetAction("Add Time Offset", this),
   _colorAction(this),
@@ -203,20 +200,6 @@ KsMainWindow::~KsMainWindow()
 		kshark_free(kshark_ctx);
 }
 
-void  KsMainWindow::registerInput(const QStringList &inputs)
-{
-	kshark_context *kshark_ctx(nullptr);
-	std::string tmp;
-
-	if (!kshark_instance(&kshark_ctx))
-		return;
-
-	for (auto const &i: inputs) {
-		tmp = i.toStdString();
-		kshark_register_input(kshark_ctx, tmp.c_str());
-	}
-}
-
 /**
  * Reimplemented event handler used to update the geometry of the window on
  * resize events.
@@ -318,11 +301,6 @@ void KsMainWindow::_createActions()
 	connect(&_addPluginsAction,	&QAction::triggered,
 		this,			&KsMainWindow::_pluginAdd);
 
-	_addUserInputAction.setIcon(QIcon::fromTheme("applications-engineering"));
-	_addUserInputAction.setStatusTip("Add User input");
-	connect(&_addUserInputAction,	&QAction::triggered,
-		this,			&KsMainWindow::_inputAdd);
-
 	_captureAction.setIcon(QIcon::fromTheme("media-record"));
 	_captureAction.setShortcut(tr("Ctrl+R"));
 	_captureAction.setStatusTip("Capture trace data");
@@ -394,6 +372,24 @@ void KsMainWindow::_createMenus()
 	sessions->addAction(&_exportSessionAction);
 	file->addAction(&_quitAction);
 
+	/*
+	 * Enable the "Append Trace File" menu only in the case of multiple
+	 * data streams.
+	 */
+	auto lamEnableAppendAction = [this] () {
+		kshark_context *kshark_ctx(nullptr);
+
+		if (!kshark_instance(&kshark_ctx))
+			return;
+
+		if (kshark_ctx->n_streams > 0)
+			_appendAction.setEnabled(true);
+		else
+			_appendAction.setEnabled(false);
+	};
+
+	connect(file,	&QMenu::aboutToShow, lamEnableAppendAction);
+
 	/* Filter menu */
 	filter = menuBar()->addMenu("Filter");
 
@@ -432,6 +428,30 @@ void KsMainWindow::_createMenus()
 	filter->addAction(&_advanceFilterAction);
 	filter->addAction(&_clearAllFilters);
 
+	/*
+	 * Enable the "TEP Advance Filtering" menu only in the case when TEP
+	 * data is loaded.
+	 */
+	auto lamEnableAdvFilterAction = [this] () {
+		kshark_context *kshark_ctx(nullptr);
+		int sd, *streamIds;
+
+		if (!kshark_instance(&kshark_ctx))
+			return;
+
+		_advanceFilterAction.setEnabled(false);
+		streamIds = kshark_all_streams(kshark_ctx);
+		for (int i = 0; i < kshark_ctx->n_streams; ++i) {
+			sd = streamIds[i];
+			if (kshark_ctx->stream[sd]->format == KS_TEP_DATA) {
+				_advanceFilterAction.setEnabled(true);
+				break;
+			}
+		}
+	};
+
+	connect(filter,	&QMenu::aboutToShow, lamEnableAdvFilterAction);
+
 	/* Plot menu */
 	plots = menuBar()->addMenu("Plots");
 	plots->addAction(&_cpuSelectAction);
@@ -441,7 +461,6 @@ void KsMainWindow::_createMenus()
 	tools = menuBar()->addMenu("Tools");
 	tools->addAction(&_managePluginsAction);
 	tools->addAction(&_addPluginsAction);
-	tools->addAction(&_addUserInputAction);
 	tools->addAction(&_captureAction);
 	tools->addAction(&_addOffcetAction);
 	tools->addSeparator();
@@ -560,7 +579,8 @@ QString KsMainWindow::lastSessionFile()
 
 void KsMainWindow::_append()
 {
-	QString fileName = KsUtils::getFile(this, "Append File",
+	QString fileName = KsUtils::getFile(this,
+					    "Append File",
 					    "trace-cmd files (*.dat);;Text files (*.txt);;All files (*)",
 					    _lastDataFilePath);
 
@@ -577,7 +597,8 @@ void KsMainWindow::_importSession()
 {
 	QString fileName;
 
-	fileName = KsUtils::getFile(this, "Import Session",
+	fileName = KsUtils::getFile(this,
+				    "Import Session",
 				    "Kernel Shark Config files (*.json);;",
 				    _lastConfFilePath);
 
@@ -595,7 +616,6 @@ void KsMainWindow::_updateSession()
 		return;
 
 	_session.saveVisModel(_graph.glPtr()->model()->histo());
-	_session.saveDataInputs(kshark_ctx);
 	_session.saveDataStreams(kshark_ctx);
 	_session.saveGraphs(kshark_ctx, _graph);
 	_session.saveDualMarker(&_mState);
@@ -608,7 +628,8 @@ void KsMainWindow::_exportSession()
 {
 	QString fileName;
 
-	fileName = KsUtils::getSaveFile(this, "Export Filter",
+	fileName = KsUtils::getSaveFile(this,
+					"Export Filter",
 					"Kernel Shark Config files (*.json);;",
 					".json",
 					_lastConfFilePath);
@@ -649,7 +670,8 @@ void KsMainWindow::_importFilter()
 	if (!kshark_instance(&kshark_ctx))
 		return;
 
-	fileName = KsUtils::getFile(this, "Import Filter",
+	fileName = KsUtils::getFile(this,
+				    "Import Filter",
 				    "Kernel Shark Config files (*.json);;",
 				    _lastConfFilePath);
 
@@ -667,7 +689,8 @@ void KsMainWindow::_exportFilter()
 	if (!kshark_instance(&kshark_ctx))
 		return;
 
-	fileName = KsUtils::getSaveFile(this, "Export Filter",
+	fileName = KsUtils::getSaveFile(this,
+					"Export Filter",
 					"Kernel Shark Config files (*.json);;",
 					".json",
 					_lastConfFilePath);
@@ -693,7 +716,7 @@ void KsMainWindow::_graphFilterSync(int state)
 void KsMainWindow::_showEvents()
 {
 	kshark_context *kshark_ctx(nullptr);
-	QVector<KsCheckBoxWidget *> cbds;
+	QVector<KsCheckBoxWidget *> cbws;
 	KsCheckBoxWidget *events_cb;
 	KsCheckBoxDialog *dialog;
 	kshark_data_stream *stream;
@@ -706,7 +729,7 @@ void KsMainWindow::_showEvents()
 	for (int i = 0; i < kshark_ctx->n_streams; ++i) {
 		stream = kshark_ctx->stream[streamIds[i]];
 		events_cb = new KsEventsCheckBoxWidget(stream, this);
-		cbds.append(events_cb);
+		cbws.append(events_cb);
 
 		if (!stream->show_event_filter ||
 		    !stream->show_event_filter->count) {
@@ -731,7 +754,7 @@ void KsMainWindow::_showEvents()
 	}
 
 	free(streamIds);
-	dialog = new KsCheckBoxDialog(cbds, this);
+	dialog = new KsCheckBoxDialog(cbws, this);
 
 	connect(dialog,		&KsCheckBoxDialog::apply,
 		&_data,		&KsDataStore::applyPosEventFilter);
@@ -742,7 +765,7 @@ void KsMainWindow::_showEvents()
 void KsMainWindow::_showTasks()
 {
 	kshark_context *kshark_ctx(nullptr);
-	QVector<KsCheckBoxWidget *> cbds;
+	QVector<KsCheckBoxWidget *> cbws;
 	kshark_data_stream *stream;
 	KsCheckBoxWidget *tasks_cbd;
 	KsCheckBoxDialog *dialog;
@@ -755,7 +778,7 @@ void KsMainWindow::_showTasks()
 	for (int i = 0; i < kshark_ctx->n_streams; ++i) {
 			stream = kshark_ctx->stream[streamIds[i]];
 		tasks_cbd = new KsTasksCheckBoxWidget(stream, true, this);
-		cbds.append(tasks_cbd);
+		cbws.append(tasks_cbd);
 
 		if (!stream->show_task_filter ||
 		    !stream->show_task_filter->count) {
@@ -776,7 +799,7 @@ void KsMainWindow::_showTasks()
 	}
 
 	free(streamIds);
-	dialog = new KsCheckBoxDialog(cbds, this);
+	dialog = new KsCheckBoxDialog(cbws, this);
 
 	connect(dialog,		&KsCheckBoxDialog::apply,
 		&_data,		&KsDataStore::applyPosTaskFilter);
@@ -787,7 +810,7 @@ void KsMainWindow::_showTasks()
 void KsMainWindow::_hideTasks()
 {
 	kshark_context *kshark_ctx(nullptr);
-	QVector<KsCheckBoxWidget *> cbds;
+	QVector<KsCheckBoxWidget *> cbws;
 	kshark_data_stream *stream;
 	KsCheckBoxWidget *tasks_cbd;
 	KsCheckBoxDialog *dialog;
@@ -800,7 +823,7 @@ void KsMainWindow::_hideTasks()
 	for (int i = 0; i < kshark_ctx->n_streams; ++i) {
 		stream = kshark_ctx->stream[streamIds[i]];
 		tasks_cbd = new KsTasksCheckBoxWidget(stream, false, this);
-		cbds.append(tasks_cbd);
+		cbws.append(tasks_cbd);
 
 		if (!stream->hide_task_filter ||
 		    !stream->hide_task_filter->count) {
@@ -821,7 +844,7 @@ void KsMainWindow::_hideTasks()
 	}
 
 	free(streamIds);
-	dialog = new KsCheckBoxDialog(cbds, this);
+	dialog = new KsCheckBoxDialog(cbws, this);
 
 	connect(dialog,		&KsCheckBoxDialog::apply,
 		&_data,		&KsDataStore::applyNegTaskFilter);
@@ -832,7 +855,7 @@ void KsMainWindow::_hideTasks()
 void KsMainWindow::_showCPUs()
 {
 	kshark_context *kshark_ctx(nullptr);
-	QVector<KsCheckBoxWidget *> cbds;
+	QVector<KsCheckBoxWidget *> cbws;
 	kshark_data_stream *stream;
 	KsCheckBoxWidget *cpus_cbd;
 	KsCheckBoxDialog *dialog;
@@ -845,7 +868,7 @@ void KsMainWindow::_showCPUs()
 	for (int i = 0; i < kshark_ctx->n_streams; ++i) {
 		stream = kshark_ctx->stream[streamIds[i]];
 		cpus_cbd = new KsCPUCheckBoxWidget(stream, this);
-		cbds.append(cpus_cbd);
+		cbws.append(cpus_cbd);
 
 		if (!stream->show_cpu_filter ||
 		    !stream->show_cpu_filter->count) {
@@ -862,7 +885,7 @@ void KsMainWindow::_showCPUs()
 	}
 
 	free(streamIds);
-	dialog = new KsCheckBoxDialog(cbds, this);
+	dialog = new KsCheckBoxDialog(cbws, this);
 
 	connect(dialog,		&KsCheckBoxDialog::apply,
 		&_data,		&KsDataStore::applyPosCPUFilter);
@@ -873,7 +896,7 @@ void KsMainWindow::_showCPUs()
 void KsMainWindow::_hideCPUs()
 {
 	kshark_context *kshark_ctx(nullptr);
-	QVector<KsCheckBoxWidget *> cbds;
+	QVector<KsCheckBoxWidget *> cbws;
 	kshark_data_stream *stream;
 	KsCheckBoxWidget *cpus_cbd;
 	KsCheckBoxDialog *dialog;
@@ -886,7 +909,7 @@ void KsMainWindow::_hideCPUs()
 	for (int i = 0; i < kshark_ctx->n_streams; ++i) {
 		stream = kshark_ctx->stream[streamIds[i]];
 		cpus_cbd = new KsCPUCheckBoxWidget(stream, this);
-		cbds.append(cpus_cbd);
+		cbws.append(cpus_cbd);
 
 		if (!stream->hide_cpu_filter ||
 		    !stream->hide_cpu_filter->count) {
@@ -903,7 +926,7 @@ void KsMainWindow::_hideCPUs()
 	}
 
 	free(streamIds);
-	dialog = new KsCheckBoxDialog(cbds, this);
+	dialog = new KsCheckBoxDialog(cbws, this);
 
 	connect(dialog,		&KsCheckBoxDialog::apply,
 		&_graph,	&KsTraceGraph::cpuReDraw);
@@ -930,7 +953,7 @@ void KsMainWindow::_clearFilters()
 void KsMainWindow::_cpuSelect()
 {
 	kshark_context *kshark_ctx(nullptr);
-	QVector<KsCheckBoxWidget *> cbds;
+	QVector<KsCheckBoxWidget *> cbws;
 	kshark_data_stream *stream;
 	KsCheckBoxWidget *cpus_cbd;
 	KsCheckBoxDialog *dialog;
@@ -944,7 +967,7 @@ void KsMainWindow::_cpuSelect()
 		sd = streamIds[i];
 		stream = kshark_ctx->stream[streamIds[i]];
 		cpus_cbd = new KsCPUCheckBoxWidget(stream, this);
-		cbds.append(cpus_cbd);
+		cbws.append(cpus_cbd);
 
 		nCPUs = stream->n_cpus;
 		if (nCPUs == _graph.glPtr()->cpuGraphCount(sd)) {
@@ -959,7 +982,7 @@ void KsMainWindow::_cpuSelect()
 	}
 
 	free(streamIds);
-	dialog = new KsCheckBoxDialog(cbds, this);
+	dialog = new KsCheckBoxDialog(cbws, this);
 
 	connect(dialog,		&KsCheckBoxDialog::apply,
 		&_graph,	&KsTraceGraph::cpuReDraw);
@@ -970,7 +993,7 @@ void KsMainWindow::_cpuSelect()
 void KsMainWindow::_taskSelect()
 {
 	kshark_context *kshark_ctx(nullptr);
-	QVector<KsCheckBoxWidget *> cbds;
+	QVector<KsCheckBoxWidget *> cbws;
 	kshark_data_stream *stream;
 	KsCheckBoxWidget *tasks_cbd;
 	KsCheckBoxDialog *dialog;
@@ -985,7 +1008,7 @@ void KsMainWindow::_taskSelect()
 		sd = streamIds[i];
 		stream = kshark_ctx->stream[streamIds[i]];
 		tasks_cbd = new KsTasksCheckBoxWidget(stream, true, this);
-		cbds.append(tasks_cbd);
+		cbws.append(tasks_cbd);
 
 		pids = KsUtils::getPidList(sd);
 		nPids = pids.count();
@@ -1009,7 +1032,7 @@ void KsMainWindow::_taskSelect()
 	}
 
 	free(streamIds);
-	dialog = new KsCheckBoxDialog(cbds, this);
+	dialog = new KsCheckBoxDialog(cbws, this);
 
 	connect(dialog,		&KsCheckBoxDialog::apply,
 		&_graph,	&KsTraceGraph::taskReDraw);
@@ -1020,27 +1043,41 @@ void KsMainWindow::_taskSelect()
 void KsMainWindow::_pluginSelect()
 {
 	kshark_context *kshark_ctx(nullptr);
-	QVector<KsCheckBoxWidget *> cbds;
-	KsCheckBoxWidget *plugin_cbd;
+	QVector<KsCheckBoxWidget *> cbws;
+	KsPluginCheckBoxWidget *plugin_cbw;
 	KsCheckBoxDialog *dialog;
+	QVector<int> enabledPlugins, failedPlugins;
+	QStringList pluginList;
 	int *streamIds, sd;
-	QStringList plgList;
 
 	if (!kshark_instance(&kshark_ctx))
 		return;
 
-	plgList = _plugins.getPluginList();
+	if (kshark_ctx->n_streams == 0) {
+		QString err("Data has to be loaded first.");
+		QMessageBox msgBox;
+		msgBox.critical(nullptr, "Error", err);
+
+		return;
+	}
 
 	streamIds = kshark_all_streams(kshark_ctx);
 	for (int i = 0; i < kshark_ctx->n_streams; ++i) {
 		sd = streamIds[i];
-		plugin_cbd = new KsPluginCheckBoxWidget(sd, plgList, this);
-		plugin_cbd->set(_plugins.getRegisteredPlugins(sd));
-		cbds.append(plugin_cbd);
+		pluginList = _plugins.getStreamPluginList(sd);
+		enabledPlugins = _plugins.getActivePlugins(sd);
+		failedPlugins =
+			_plugins.getPluginsByStatus(sd, KSHARK_PLUGIN_FAILED);
+
+		plugin_cbw = new KsPluginCheckBoxWidget(sd, pluginList, this);
+		plugin_cbw->set(enabledPlugins);
+		plugin_cbw->setActive(failedPlugins, false);
+
+		cbws.append(plugin_cbw);
 	}
 
 	free(streamIds);
-	dialog = new KsPluginsCheckBoxDialog(cbds, &_data, this);
+	dialog = new KsPluginsCheckBoxDialog(cbws, &_data, this);
 	dialog->applyStatus();
 
 	connect(dialog,		&KsCheckBoxDialog::apply,
@@ -1062,8 +1099,9 @@ void KsMainWindow::_pluginUpdate(int sd, QVector<int> pluginStates)
 	streamIds = kshark_all_streams(kshark_ctx);
 	_plugins.updatePlugins(sd, pluginStates);
 	if (sd == streamIds[kshark_ctx->n_streams - 1]) {
-		/* This is the last stream, Reload all data. */
-		_data.reload();
+		/* This is the last stream. Reload the data. */
+		if (_data.size())
+			_data.reload();
 	}
 
 	free(streamIds);
@@ -1071,28 +1109,44 @@ void KsMainWindow::_pluginUpdate(int sd, QVector<int> pluginStates)
 
 void KsMainWindow::_pluginAdd()
 {
+	kshark_context *kshark_ctx(nullptr);
 	QStringList fileNames;
+	QVector<int> streams;
 
-	fileNames = KsUtils::getFiles(this, "Add KernelShark plugins",
+	if (!kshark_instance(&kshark_ctx))
+		return;
+
+	fileNames = KsUtils::getFiles(this,
+				      "Add KernelShark plugins",
 				      "KernelShark Plugins (*.so);;",
 				      _lastPluginFilePath);
 
-	if (!fileNames.isEmpty())
-		_plugins.addPlugins(fileNames);
+	if (!fileNames.isEmpty()) {
+		if (kshark_ctx->n_streams > 1) {
+			KsDStreamCheckBoxWidget *stream_cbw;
+			QVector<KsCheckBoxWidget *> cbws;
+			KsCheckBoxDialog *dialog;
 
-	_graph.update(&_data);
-}
+			stream_cbw = new KsDStreamCheckBoxWidget();
+			cbws.append(stream_cbw);
+			dialog = new KsCheckBoxDialog(cbws, this);
 
-void KsMainWindow::_inputAdd()
-{
-	QStringList fileNames;
+			auto lamStreams = [&streams] (int, QVector<int> s) {
+				streams = s;
+			};
 
-	fileNames = KsUtils::getFiles(this, "Add User data input for KernelShark",
-				      "Data input plugins (*.so);;",
-				      _lastPluginFilePath);
+			connect(dialog, &KsCheckBoxDialog::apply, lamStreams);
+			dialog->exec();
+		}
 
-	if (!fileNames.isEmpty())
-		registerInput(fileNames);
+		_graph.startOfWork(KsDataWork::UpdatePligins);
+
+		_plugins.addPlugins(fileNames, streams);
+		if (_data.size())
+			_data.reload();
+
+		_graph.endOfWork(KsDataWork::UpdatePligins);
+	}
 }
 
 void KsMainWindow::_record()
@@ -1192,7 +1246,7 @@ void KsMainWindow::_load(const QString& fileName, bool append)
 
 		text.append(fileName);
 		text.append(".");
-		_error(text, "loadDataErr1", true, true);
+		_error(text, "loadDataErr1", true);
 
 		return;
 	}
@@ -1225,7 +1279,13 @@ void KsMainWindow::_load(const QString& fileName, bool append)
 	_graph.reset();
 
 	auto lamLoadJob = [&, this] () {
-		sd = _data.loadDataFile(fileName);
+		QVector<kshark_dpi *> v;
+		for (auto const p: _plugins.getUserDataPlugins()) {
+			if (p->process_interface)
+				v.append(p->process_interface);
+		}
+
+		sd = _data.loadDataFile(fileName, v);
 		loadDone = true;
 	};
 
@@ -1255,21 +1315,18 @@ void KsMainWindow::_load(const QString& fileName, bool append)
 
 	job.join();
 
-	if (!_data.size()) {
+	if (sd < 0 || !_data.size()) {
 		QString text("File ");
 
 		text.append(fileName);
 		text.append(" contains no data.");
-		_error(text, "loadDataErr2", true, true);
+		_error(text, "loadDataErr2", true);
 
 		return;
 	}
 
-	_plugins.addStream(sd);
-	pb.setValue(165);
-
 	_view.loadData(&_data);
-	pb.setValue(180);
+	pb.setValue(175);
 
 	_graph.loadData(&_data);
 	pb.setValue(195);
@@ -1289,8 +1346,9 @@ void KsMainWindow::appendDataFile(const QString& fileName)
 	_load(fileName, true);
 }
 
-void KsMainWindow::_error(const QString &mesg, const QString &errCode,
-			  bool resize, bool unloadPlugins)
+void KsMainWindow::_error(const QString &mesg,
+			  const QString &errCode,
+			  bool resize)
 {
 	QErrorMessage *em = new QErrorMessage(this);
 	QString text = mesg;
@@ -1299,13 +1357,10 @@ void KsMainWindow::_error(const QString &mesg, const QString &errCode,
 	if (resize)
 		_resizeEmpty();
 
-	if (unloadPlugins)
-		_plugins.unloadAll();
-
 	text.replace("<br>", "\n", Qt::CaseInsensitive);
 	html.replace("\n", "<br>", Qt::CaseInsensitive);
 
-	qCritical().noquote() << "ERROR: " << text;
+	qCritical().noquote() << "ERROR:" << text;
 	em->showMessage(html, errCode);
 	em->exec();
 }
@@ -1331,7 +1386,7 @@ void KsMainWindow::loadSession(const QString &fileName)
 
 		text.append(fileName);
 		text.append("\n");
-		_error(text, "loadSessErr0", true, true);
+		_error(text, "loadSessErr0", true);
 
 		return;
 	}
@@ -1344,18 +1399,20 @@ void KsMainWindow::loadSession(const QString &fileName)
 
 		text.append(fileName);
 		text.append(".\n");
-		_error(text, "loadSessErr1", true, true);
+		_error(text, "loadSessErr1", true);
 
 		return;
 	}
 
-	_session.loadPlugins(kshark_ctx, &_plugins);
+	_view.reset();
+	_graph.reset();
 	_data.clear();
+
+	_session.loadPlugins(kshark_ctx, &_plugins);
 	pb.setValue(20);
 
 	auto lamLoadJob = [&] (KsDataStore *d) {
-		_session.loadDataInputs(kshark_ctx);
-		_session.loadDataStreams(kshark_ctx, &_data, &_plugins);
+		_session.loadDataStreams(kshark_ctx, &_data);
 		loadDone = true;
 	};
 
@@ -1374,11 +1431,6 @@ void KsMainWindow::loadSession(const QString &fileName)
 	}
 
 	job.join();
-
-	if (!kshark_ctx->n_streams) {
-		_plugins.unloadAll();
-		return;
-	}
 
 	_view.loadData(&_data);
 	_graph.loadData(&_data);
@@ -1484,7 +1536,7 @@ void KsMainWindow::_captureErrorMessage(QProcess *capture)
 	message += capture->errorString();
 	message += "<br>Standard Error: ";
 	message += capture->readAllStandardError();
-	_error(message, "captureFinishedErr", false, false);
+	_error(message, "captureFinishedErr", false);
 }
 
 void KsMainWindow::_readSocket()
@@ -1496,7 +1548,7 @@ void KsMainWindow::_readSocket()
 	auto lamSocketError = [&](QString message)
 	{
 		message = "ERROR from Local Server: " + message;
-		_error(message, "readSocketErr", false, false);
+		_error(message, "readSocketErr", false);
 	};
 
 	socket = _captureLocalServer.nextPendingConnection();

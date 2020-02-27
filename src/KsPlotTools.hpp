@@ -23,6 +23,33 @@
 
 namespace KsPlot {
 
+/** Plotting action identifier. */
+enum kshark_plotting_actions {
+	/**
+	 * Task draw action. This action identifier is used by the plugin draw
+	 * function.
+	 */
+	KSHARK_TASK_DRAW	= 1 << 0,
+
+	/**
+	 * CPU draw action. This action identifier is used by the plugin draw
+	 * function.
+	 */
+	KSHARK_CPU_DRAW		= 1 << 1,
+
+	/**
+	 * Draw action for the Host graph in Virtual Combos. This action
+	 * identifier is used by the plugin draw function.
+	 */
+	KSHARK_HOST_DRAW	= 1 << 2,
+
+	/**
+	 * Draw action for the Guest graph in Virtual Combos. This action
+	 * identifier is used by the plugin draw function.
+	 */
+	KSHARK_GUEST_DRAW	= 1 << 3,
+};
+
 /** This class represents a RGB color. */
 class Color {
 public:
@@ -553,17 +580,14 @@ public:
 				int lSize, int hMargin);
 
 	/**
-	 * Check if this graph is Zero Suppressed. Zero Suppressed means that
-	 * bins having Id value = 0 (Idle task records) are not grouped
-	 * together.
-	 */
-	bool zeroSuppressed(bool zs) {return _zeroSuppress;}
-
-	/**
 	 * Set Zero Suppression. If True, the bins having Id value = 0 (Idle
 	 * task records) are not grouped together.
 	 */
-	void setZeroSuppressed(bool zs) {_zeroSuppress = zs;}
+	void setIdleSuppressed(bool is, int ip = 0)
+	{
+		_idleSuppress = is;
+		_idlePid = ip;
+	}
 
 	/** Draw the base line of the graph or not. */
 	void setDrawBase(bool b) {_drawBase = b;}
@@ -602,90 +626,15 @@ protected:
 private:
 	TextBox		_label;
 
-	bool	_zeroSuppress;
+	bool	_idleSuppress;
+
+	int	_idlePid;
 
 	bool	_drawBase;
 
 	void	_initBins();
 
 	int	_bin0Offset();
-};
-
-/** This class represents a KernelShark Virtual Combo graph. */
-class ComboGraph {
-public:
-	ComboGraph();
-
-	/*
-	 * Disable copying. We can enable the Copy Constructor in the future,
-	 * but only if we really need it for some reason.
-	 */
-	ComboGraph(const Graph &) = delete;
-
-	/* Disable moving. Same as copying. */
-	ComboGraph(ComboGraph &&) = delete;
-
-	ComboGraph(kshark_trace_histo *histo, KsPlot::ColorTable *bct,
-					      KsPlot::ColorTable *ect);
-
-	/* Keep this destructor virtual. */
-	virtual ~ComboGraph() {}
-
-	/**
-	 * @brief Provide the Host graph with a Data Collection. This
-	 *	  collection will be used to optimise the processing of the
-	 *	  content of the bins.
-	 *
-	 * @param col: Input location for the data collection descriptor.
-	 */
-	void setHostDataCollectionPtr(kshark_entry_collection *col) {
-		_host.setDataCollectionPtr(col);
-	}
-
-	/**
-	 * @brief Provide the Guest graph with a Data Collection. This
-	 *	  collection will be used to optimise the processing of the
-	 *	  content of the bins.
-	 *
-	 * @param col: Input location for the data collection descriptor.
-	 */
-	void setGuestDataCollectionPtr(kshark_entry_collection *col) {
-		_guest.setDataCollectionPtr(col);
-	}
-
-	void setBase(int b);
-
-	void setHeight(int h);
-
-	/** @brief Get the vertical size (height) of the Combo graph. */
-	int height() const {return _host.height() + _guest.height();}
-
-	void setLabelAppearance(ksplot_font *f, Color colHost, Color colGuest,
-				int lSize, int hMargin);
-
-	void fill(int sdHost, int pidHost, int sdGuest, int vcpu);
-
-	void draw(float size = 1);
-
-	/** Host tracing data graph. */
-	Graph _host;
-
-	/** Guest tracing data graph. */
-	Graph _guest;
-
-private:
-	/** Pointer to the model descriptor object. */
-	kshark_trace_histo	*_histoPtr;
-
-	void _init();
-
-	void _drawBridge();
-
-	int _sdHost;
-
-	int _pidHost;
-
-	int _vcpuEntryId, _vcpuExitId;
 };
 
 /**

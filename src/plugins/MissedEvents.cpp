@@ -95,12 +95,12 @@ static void pluginDraw(kshark_context *kshark_ctx,
 
 	int nBins = argvCpp->_graph->size();
 	for (int bin = 0; bin < nBins; ++bin) {
-		if (draw_action == KSHARK_PLUGIN_TASK_DRAW)
+		if (draw_action & KsPlot::KSHARK_TASK_DRAW)
 			entry = ksmodel_get_task_missed_events(argvCpp->_histo,
 							       bin, sd, val,
 							       nullptr,
 							       &index);
-		if (draw_action == KSHARK_PLUGIN_CPU_DRAW)
+		else if (draw_action & KsPlot::KSHARK_CPU_DRAW)
 			entry = ksmodel_get_cpu_missed_events(argvCpp->_histo,
 							      bin, sd, val,
 							      nullptr,

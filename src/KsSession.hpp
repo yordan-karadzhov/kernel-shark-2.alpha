@@ -63,8 +63,7 @@ public:
 	void saveDataStreams(kshark_context *kshark_ctx);
 
 	void loadDataStreams(kshark_context *kshark_ctx,
-			     KsDataStore *data,
-			     KsPluginManager *plugins);
+			     KsDataStore *data);
 
 	void saveMainWindowSize(const QMainWindow &window);
 
@@ -81,10 +80,6 @@ public:
 	void savePlugins(const KsPluginManager &pm);
 
 	void loadPlugins(kshark_context *kshark_ctx, KsPluginManager *pm);
-
-	void saveDataInputs(kshark_context *kshark_ctx);
-
-	void loadDataInputs(kshark_context *kshark_ctx);
 
 	void saveTable(const KsTraceViewer &view);
 

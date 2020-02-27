@@ -24,38 +24,39 @@
 /** Struct describing all graphs to be plotted for a given Data stream. */
 struct KsPerStreamPlots {
 	/** CPUs to be plotted. */
-	QVector<int>	_cpuList;
+	QVector<int>			_cpuList;
 
 	/** "Y" coordinates of the bases of all CPU plots for this stream. */
-	QVector<int>	_cpuPlotBase;
+	QVector<KsPlot::Graph *>	_cpuGraphs;
 
 	/** Tasks to be plotted. */
-	QVector<int>	_taskList;
+	QVector<int>			_taskList;
 
 	/** "Y" coordinates of the bases of all CPU plots for this stream. */
-	QVector<int>	_taskPlotBase;
+	QVector<KsPlot::Graph *>	_taskGraphs;
 };
 
-/** Structure identifying a VirtComboPlot. */
-struct KsVirtComboPlot {
-	/** The stream identifier of the Host data. */
-	int	_hostStreamId;
+struct KsPlotEntry {
+	/** The stream of the plot. */
+	int	_streamId;
 
-	/** The process Id of the Host task. */
-	int	_hostPid;
+	/** Plotting action identifier (Task or CPU plot). */
+	int	_type;
 
-	/** The stream identifier of the Guest data. */
-	int	_guestStreamId;
+	/** Identifier of the plot (can be PID or CPU number). */
+	int	_id;
 
-	/** The Id number of the virtual CPU. */
-	int	_vcpu;
+	/** "Y" coordinates of the bases of the plot. */
+	KsPlot::Graph	*_graph;
 
-	/** "Y" coordinates of the bases of Host task plot. */
-	int	_hostBase;
-
-	/** "Y" coordinates of the bases of vCPU plot. */
-	int	_vcpuBase;
+	int base() const {return _graph->base();}
 };
+
+KsPlotEntry &operator <<(KsPlotEntry &plot, QVector<int> &v);
+
+void operator >>(KsPlotEntry &plot, QVector<int> &v);
+
+typedef QVector<KsPlotEntry>	KsComboPlot;
 
 /**
  * The KsGLWidget class provides a widget for rendering OpenGL graphics used
@@ -148,8 +149,13 @@ public:
 		return count;
 	}
 
-	/** Get the number of VirtCombo plots. */
-	int comboGraphCount() const {return _comboPlots.count();}
+	/** Get the number of plots in Combos. */
+	int comboGraphCount() const {
+		int count(0);
+		for (auto const &c: _comboPlots)
+			count += c.count();
+		return count;
+	}
 
 	/** Check if the widget is empty (not showing anything). */
 	bool isEmpty() const
@@ -162,7 +168,8 @@ public:
 	int height() const
 	{
 		return totGraphCount() * (KS_GRAPH_HEIGHT + _vSpacing) +
-		       comboGraphCount() * (KS_GRAPH_HEIGHT * 2 + _vSpacing) +
+		       comboGraphCount() * KS_GRAPH_HEIGHT +
+		       _comboPlots.count() * _vSpacing +
 		       _vMargin * 2;
 	}
 
@@ -188,8 +195,8 @@ public:
 	/** CPUs and Tasks graphs (per data stream) to be plotted. */
 	QMap<int, KsPerStreamPlots>	_streamPlots;
 
-	/** Virt Combo graphs to be plotted. */
-	QVector<KsVirtComboPlot>	_comboPlots;
+	/** Combo graphs to be plotted. */
+	QVector<KsComboPlot>		_comboPlots;
 
 signals:
 	/**
@@ -235,9 +242,7 @@ signals:
 	void updateView(size_t pos, bool mark);
 
 private:
-	QMap<int, QVector<KsPlot::Graph*>>	_graphs;
-
-	QVector<KsPlot::ComboGraph*>		_comboGraphs;
+	QMap<int, QVector<KsPlot::Graph *>>	_graphs;
 
 	KsPlot::PlotObjList	_shapes;
 
@@ -278,9 +283,6 @@ private:
 	KsPlot::Graph *_newCPUGraph(int sd, int cpu);
 
 	KsPlot::Graph *_newTaskGraph(int sd, int pid);
-
-	KsPlot::ComboGraph *_newComboGraph(int sdHost, int pidHost,
-					   int sdGuest, int vcpu);
 
 	void _makePluginShapes();
 

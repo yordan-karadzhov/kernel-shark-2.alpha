@@ -275,7 +275,7 @@ static ssize_t get_records(struct kshark_context *kshark_ctx,
 					missed_events_action(stream, rec, entry);
 
 					/* Apply time calibration. */
-					kshark_postprocess_entry(NULL, stream, rec, entry);
+					kshark_postprocess_entry(stream, rec, entry);
 
 					entry->stream_id = stream->stream_id;
 
@@ -302,7 +302,7 @@ static ssize_t get_records(struct kshark_context *kshark_ctx,
 				 * Post-process the content of the entry. This includes
 				 * time calibration and event-specific plugin actions.
 				 */
-				kshark_postprocess_entry(kshark_ctx, stream, rec, entry);
+				kshark_postprocess_entry(stream, rec, entry);
 
 				pid = entry->pid;
 
@@ -978,14 +978,23 @@ static void kshark_tep_init_methods(struct kshark_data_stream *stream)
 	stream->interface.load_matrix = tepdata_load_matrix;
 }
 
+const char *tep_plugin_names[] = {"sched_events",
+				  "missed_events",
+				  "kvm_combo"};
+
+#define LINUX_IDLE_TASK_PID	0
+
 /** Initialize the FTRACE data input (from file). */
 int kshark_tep_init_input(struct kshark_data_stream *stream,
 			  const char *file)
 {
+	struct kshark_context *kshark_ctx = NULL;
 	struct tepdata_handle *tep_handle;
+	struct kshark_plugin_list *plugin;
 	struct tep_event *event;
+	int i, n_tep_plugins;
 
-	if (!init_thread_seq())
+	if (!kshark_instance(&kshark_ctx) || !init_thread_seq())
 		return -EEXIST;
 
 	/*
@@ -1023,12 +1032,27 @@ int kshark_tep_init_input(struct kshark_data_stream *stream,
 
 	stream->n_cpus = tep_get_cpus(tep_handle->tep);
 	stream->n_events = tep_get_events_count(tep_handle->tep);
+	stream->idle_pid = LINUX_IDLE_TASK_PID;
 
 	tep_handle->advanced_event_filter =
 		tep_filter_alloc(tep_handle->tep);
 
 	stream->interface.handle = tep_handle;
 	kshark_tep_init_methods(stream);
+
+	n_tep_plugins = sizeof(tep_plugin_names) / sizeof (const char *);
+	for (i = 0; i < n_tep_plugins; ++i) {
+		plugin = kshark_find_plugin_by_name(kshark_ctx->plugins,
+						    tep_plugin_names[i]);
+
+		if (plugin && plugin->process_interface) {
+			kshark_register_plugin_to_stream(stream,
+							 plugin->process_interface,
+							 true);
+		}
+	}
+
+	kshark_handle_all_dpis(stream, KSHARK_PLUGIN_INIT);
 
 	return 0;
 }
@@ -1049,7 +1073,7 @@ int kshark_tep_init_local(struct kshark_data_stream *stream)
 	stream->n_events = tep_get_events_count(tep_handle->tep);
 	stream->n_cpus =  tep_get_cpus(tep_handle->tep);
 	stream->format = KS_TEP_DATA;
-	if (asprintf(&stream->file, "Local Events") <= 0)
+	if (asprintf(&stream->file, "local events") <= 0)
 		goto fail;
 
 	stream->interface.handle = tep_handle;
@@ -1061,7 +1085,6 @@ int kshark_tep_init_local(struct kshark_data_stream *stream)
 	free(tep_handle);
 	stream->interface.handle = NULL;
 	return -EFAULT;
-
 }
 
 /** Method used to close a stream of FTRACE data. */

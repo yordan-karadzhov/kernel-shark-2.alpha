@@ -94,14 +94,14 @@ bool kshark_hash_id_find(struct kshark_hash_id *hash, int id)
 		if (item->id == id)
 			break;
 
-	return !!(unsigned long)item;
+	return !!(unsigned long) item;
 }
 
 /**
  * @brief Add Id to the hash table.
  *
- * @param hash:
- * @param id: The Id number tp be added.
+ * @param hash: The hash table to add to.
+ * @param id: The Id number to be added.
  */
 void kshark_hash_id_add(struct kshark_hash_id *hash, int id)
 {

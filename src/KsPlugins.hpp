@@ -17,8 +17,6 @@
 #include "libkshark-model.h"
 #include "KsPlotTools.hpp"
 
-typedef void (*pluginMenuFunc) (void *);
-
 class KsMainWindow;
 typedef void (pluginActionFunc) (KsMainWindow *);
 

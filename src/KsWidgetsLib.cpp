@@ -1090,19 +1090,69 @@ KsPluginCheckBoxWidget::KsPluginCheckBoxWidget(int sd, QStringList pluginList,
 	_adjustSize();
 }
 
-void KsPluginsCheckBoxDialog::_preApplyAction()
+void KsPluginCheckBoxWidget::setInfo(int row, QString info)
 {
-	kshark_context *kshark_ctx(nullptr);
+	QTableWidgetItem *infoItem = _table.item(row, 2);
+	infoItem->setText(info);
+}
 
-	if (!kshark_instance(&kshark_ctx))
-		return;
-
-	kshark_close_all_plugins(kshark_ctx);
+void KsPluginCheckBoxWidget::setActive(QVector<int> rows, bool a)
+{
+	for (auto const &r: rows) {
+		QTableWidgetItem *infoItem = _table.item(r, 2);
+		if (a) {
+			infoItem->setText("- Active");
+			infoItem->setForeground(QBrush(QColor(0, 220, 80)));
+		} else {
+			infoItem->setText("- Not Active");
+			infoItem->setForeground(QBrush(QColor(255, 50, 50)));
+		}
+	}
 }
 
 void KsPluginsCheckBoxDialog::_postApplyAction()
 {
 	emit _data->updateWidgets(_data);
+}
+
+KsDStreamCheckBoxWidget::KsDStreamCheckBoxWidget(QWidget *parent)
+: KsCheckBoxTableWidget(-1, "Select Data stream", parent)
+{
+	kshark_context *kshark_ctx(nullptr);
+	kshark_data_stream *stream;
+	QTableWidgetItem *nameItem;
+	int *streamIds, nStreams;
+	QStringList headers;
+
+	if (!kshark_instance(&kshark_ctx))
+		return;
+
+	streamIds = kshark_all_streams(kshark_ctx);
+	nStreams = kshark_ctx->n_streams;
+
+	headers << "Apply" << "To stream";
+	_initTable(headers, nStreams);
+	_id.resize(nStreams);
+
+	for (int i = 0; i < nStreams; ++i) {
+		stream = kshark_ctx->stream[streamIds[i]];
+		QString name(stream->file);
+		if (name < 40) {
+			nameItem = new QTableWidgetItem(name);
+		} else {
+			QLabel l;
+			KsUtils::setElidedText(&l, name,
+					       Qt::ElideLeft,
+					       FONT_WIDTH * 40);
+			nameItem = new QTableWidgetItem(l.text());
+		}
+
+		_table.setItem(i, 1, nameItem);
+		_id[i] = stream->stream_id;
+	}
+
+	_adjustSize();
+	free(streamIds);
 }
 
 }; // KsWidgetsLib

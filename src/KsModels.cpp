@@ -300,6 +300,7 @@ QString KsViewModel::getValueStr(int column, int row) const
 	switch (column) {
 		case TRACE_VIEW_COL_STREAM :
 			return QString("%1").arg(_data[row]->stream_id);
+
 		case TRACE_VIEW_COL_INDEX :
 			return QString("%1").arg(row);
 

@@ -12,7 +12,6 @@
 // KernelShark
 #include "libkshark.h"
 #include "libkshark-tepdata.h"
-#include "libkshark-input.h"
 #include "KsSession.hpp"
 #include "KsMainWindow.hpp"
 
@@ -213,11 +212,9 @@ void KsSession::saveDataStreams(kshark_context *kshark_ctx)
  * @param plugins: Input location for KsPluginManager object;
  */
 void KsSession::loadDataStreams(kshark_context *kshark_ctx,
-				KsDataStore *data,
-				KsPluginManager *plugins)
+				KsDataStore *data)
 {
 	ssize_t dataSize;
-	int *streamIds;
 
 	data->unregisterCPUCollections();
 
@@ -230,13 +227,7 @@ void KsSession::loadDataStreams(kshark_context *kshark_ctx,
 	}
 
 	data->setSize(dataSize);
-
 	data->registerCPUCollections();
-	streamIds = kshark_all_streams(kshark_ctx);
-	for (int i = 0; i < kshark_ctx->n_streams; ++i)
-		plugins->addStream(streamIds[i]);
-
-	free(streamIds);
 }
 
 /**
@@ -442,7 +433,8 @@ void KsSession::loadGraphs(kshark_context *kshark_ctx,
 	free(streamIds);
 
 	combos = _getComboPlots(&nCombos);
-	graphs.comboReDraw(nCombos, combos);
+	if (nCombos > 0)
+		graphs.comboReDraw(nCombos, combos);
 }
 
 void KsSession::_savePlots(int sd, KsGLWidget *glw, bool cpu)
@@ -476,6 +468,7 @@ void KsSession::_savePlots(int sd, KsGLWidget *glw, bool cpu)
 		jstream = nullptr;
 	}
 
+	free(streamsConf);
 	if (!jstream)
 		return;
 
@@ -504,29 +497,33 @@ void KsSession::_saveTaskPlots(int sd, KsGLWidget *glw)
 void KsSession::_saveComboPlots(KsGLWidget *glw)
 {
 	kshark_config_doc *combos = kshark_config_alloc(KS_CONFIG_JSON);
-	int var, nCombos = glw->_comboPlots.count();
-	json_object *jcombo, *jplots;
+	json_object *jcombos, *jplots, *jplt;
+	int var;
 
-	jplots = json_object_new_array();
-	for (int i = 0; i < nCombos; ++i) {
-		jcombo = json_object_new_array();
+	jcombos = json_object_new_array();
+	for (auto const &c: glw->_comboPlots) {
+		jplots = json_object_new_array();
+		for (auto const &p: c) {
+			jplt = json_object_new_array();
+			var = p._streamId;
+			json_object_array_put_idx(jplt, 0,
+						  json_object_new_int(var));
 
-		var = glw->_comboPlots[i]._hostStreamId;
-		json_object_array_put_idx(jcombo, 0, json_object_new_int(var));
+			var = p._type;
+			json_object_array_put_idx(jplt, 1,
+						  json_object_new_int(var));
 
-		var = glw->_comboPlots[i]._hostPid;
-		json_object_array_put_idx(jcombo, 1, json_object_new_int(var));
+			var = p._id;
+			json_object_array_put_idx(jplt, 2,
+						  json_object_new_int(var));
 
-		var = glw->_comboPlots[i]._guestStreamId;
-		json_object_array_put_idx(jcombo, 2, json_object_new_int(var));
+			json_object_array_add(jplots, jplt);
+		}
 
-		var = glw->_comboPlots[i]._vcpu;
-		json_object_array_put_idx(jcombo, 3, json_object_new_int(var));
-
-		json_object_array_put_idx(jplots, i, jcombo);
+		json_object_array_add(jcombos, jplots);
 	}
 
-	combos->conf_doc = jplots;
+	combos->conf_doc = jcombos;
 	kshark_config_doc_add(_config, "ComboPlots", combos);
 }
 
@@ -590,31 +587,43 @@ QVector<int> KsSession::_getTaskPlots(int sd)
 QVector<int> KsSession::_getComboPlots(int *n)
 {
 	kshark_config_doc *combos = kshark_config_alloc(KS_CONFIG_JSON);
-	int nPlots, sdHost, sdGuest, pidHost, vcpu;
-	json_object *jplots, *jcombo;
+	int nCombos, nPlots, sd, type, id;
+	json_object *jcombos, *jplots, *jplt, *jvar;
 	QVector<int> vec;
 
 	*n = 0;
 	if (!kshark_config_doc_get(_config, "ComboPlots", combos))
-		return vec;
+		return {};
 
 	if (_config->format == KS_CONFIG_JSON) {
-		jplots = KS_JSON_CAST(combos->conf_doc);
-		if (json_object_get_type(jplots) != json_type_array)
-			return vec;
+		jcombos = KS_JSON_CAST(combos->conf_doc);
+		if (json_object_get_type(jcombos) != json_type_array)
+			return {};
 
-		*n = nPlots = json_object_array_length(jplots);
-		for (int i = 0; i < nPlots; ++i) {
-			jcombo = json_object_array_get_idx(jplots, i);
-			if (json_object_get_type(jcombo) != json_type_array)
-				return vec;
+		*n = nCombos = json_object_array_length(jcombos);
+		for (int i = 0; i < nCombos; ++i) {
+			jplots = json_object_array_get_idx(jcombos, i);
+			if (json_object_get_type(jplots) != json_type_array)
+				return {};
 
-			sdHost = json_object_get_int(json_object_array_get_idx(jcombo, 0));
-			pidHost = json_object_get_int(json_object_array_get_idx(jcombo, 1));
-			sdGuest = json_object_get_int(json_object_array_get_idx(jcombo, 2));
-			vcpu = json_object_get_int(json_object_array_get_idx(jcombo, 3));
+			nPlots =  json_object_array_length(jplots);
+			vec.append(nPlots);
+			for (int j = 0; j < nPlots; ++j) {
+				jplt = json_object_array_get_idx(jplots, j);
+				if (json_object_get_type(jplt) != json_type_array)
+					return {};
 
-			vec.append({sdHost, pidHost, sdGuest, vcpu});
+				jvar = json_object_array_get_idx(jplt, 0);
+				sd = json_object_get_int(jvar);
+
+				jvar = json_object_array_get_idx(jplt, 1);
+				type = json_object_get_int(jvar);
+
+				jvar = json_object_array_get_idx(jplt, 2);
+				id = json_object_get_int(jvar);
+
+				vec.append({sd, type, id});
+			}
 		}
 	}
 
@@ -755,37 +764,18 @@ void KsSession::savePlugins(const KsPluginManager &pm)
 	kshark_config_doc *plugins =
 		kshark_config_new("kshark.config.plugins", KS_CONFIG_JSON);
 	json_object *jplugins = KS_JSON_CAST(plugins->conf_doc);
-	const KsPluginMap &registeredPlugins = pm._registeredKsPlugins;
-	const QStringList &pluginList = pm._ksPluginList;
-	json_object *jpl, *jmap, *jstream, *jlist;
+	json_object *jplg, *jlist = json_object_new_array();
 
-	jpl = json_object_new_array();
-	for (auto &p: pluginList) {
-		std::string name = p.toStdString();
-		json_object_array_add(jpl, json_object_new_string(name.c_str()));
+	for (auto const p: pm.getUserDataPlugins()) {
+		kshark_config_doc *lib =
+			kshark_export_plugin_file(p, KS_CONFIG_JSON);
+		jplg = KS_JSON_CAST(lib->conf_doc);
+		json_object_array_add(jlist, jplg);
+		free(lib);
 	}
-	json_object_object_add(jplugins, "Plugin List", jpl);
 
-	jmap = json_object_new_array();
-	for (auto &s: registeredPlugins.keys()) {
-		jstream = json_object_new_object();
-		if (s < 0)
-			json_object_object_add(jstream, "stream",
-					       json_object_new_string("default"));
-		else
-			json_object_object_add(jstream, "stream",
-					       json_object_new_int(s));
-
-		jlist = json_object_new_array();
-		for (auto &p: registeredPlugins[s])
-			json_object_array_add(jlist, json_object_new_int(p));
-		json_object_object_add(jstream, "registered", jlist);
-
-		json_object_array_add(jmap, jstream);
-	}
-	json_object_object_add(jplugins, "Stream map", jmap);
-
-	kshark_config_doc_add(_config, "Plugins", plugins);
+	json_object_object_add(jplugins, "obj. files", jlist);
+	kshark_config_doc_add(_config, "User Plugins", plugins);
 }
 
 /**
@@ -796,52 +786,11 @@ void KsSession::savePlugins(const KsPluginManager &pm)
  */
 void KsSession::loadPlugins(kshark_context *kshark_ctx, KsPluginManager *pm)
 {
-// 	kshark_config_doc *plugins = kshark_config_alloc(KS_CONFIG_JSON);
-// 	json_object *jplugins, *jlist, *jpl;
-// 	const char *pluginName;
-// 	QVector<int> pluginIds;
-// 	int length, index;
-// 	bool loaded;
-// 
-// 	if (!kshark_config_doc_get(_config, "Plugins", plugins) ||
-// 	    !kshark_type_check(plugins, "kshark.config.plugins"))
-// 		return;
-// 
-// 	if (plugins->format == KS_CONFIG_JSON) {
-// 		jplugins = KS_JSON_CAST(plugins->conf_doc);
-// 		json_object_object_get_ex(jplugins, "Plugin List", &jlist);
-// 		if (!jlist ||
-// 	            json_object_get_type(jlist) != json_type_array ||
-// 		    !json_object_array_length(jlist))
-// 			return;
-// 
-// 		length = json_object_array_length(jlist);
-// 		for (int i = 0; i < length; ++i) {
-// 			jpl = json_object_array_get_idx(jlist, i);
-// 			pluginName = json_object_get_string(json_object_array_get_idx(jpl, 0));
-// 			index = pm->_ksPluginList.indexOf(pluginName);
-// 			loaded = json_object_get_boolean(json_object_array_get_idx(jpl, 1));
-// 			if (index >= 0 && loaded)
-// 				pluginIds.append(index);
-// 		}
-// 	}
-// 
-// 	pm->updatePlugins(pluginIds);
-}
+	kshark_config_doc *plugins =
+		kshark_config_alloc(KS_CONFIG_JSON);
 
-void KsSession::saveDataInputs(kshark_context *kshark_ctx)
-{
-	kshark_config_doc *inputsConf =
-	kshark_export_user_inputs(kshark_ctx, KS_CONFIG_JSON);
-	kshark_config_doc_add(_config, "Inputs", inputsConf);
-}
-
-void KsSession::loadDataInputs(kshark_context *kshark_ctx)
-{
-	kshark_config_doc *inputConf = kshark_config_alloc(KS_CONFIG_JSON);
-
-	if (!kshark_config_doc_get(_config, "Inputs", inputConf))
+	if (!kshark_config_doc_get(_config, "User Plugins", plugins))
 		return;
 
-	kshark_import_user_inputs(kshark_ctx, inputConf);
+	kshark_import_all_plugins(kshark_ctx, plugins);
 }

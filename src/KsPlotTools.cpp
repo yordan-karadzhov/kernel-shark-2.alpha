@@ -16,6 +16,7 @@
 // C++
 #include <algorithm>
 #include <vector>
+#include <iostream>
 
 // OpenGL
 #include <GL/freeglut.h>
@@ -118,8 +119,8 @@ ColorTable getTaskColorTable()
 		return colors;
 
 	streamIds = kshark_all_streams(kshark_ctx);
-	for (int i = 0; i < kshark_ctx->n_streams; ++i) {
-		nTasks = kshark_get_task_pids(kshark_ctx, streamIds[i], &pids);
+	for (int j = 0; j < kshark_ctx->n_streams; ++j) {
+		nTasks = kshark_get_task_pids(kshark_ctx, streamIds[j], &pids);
 		tempPids.insert(tempPids.end(), pids, pids + nTasks);
 		free(pids);
 	}
@@ -131,13 +132,18 @@ ColorTable getTaskColorTable()
 
 	std::sort(tempPids.begin(), tempPids.end());
 
-	/** Erase duplicates. */
+	/* Erase duplicates. */
 	tempPids.erase(unique(tempPids.begin(), tempPids.end()),
 		       tempPids.end());
 
+	/* Erase negative (error codes). */
+	auto isNegative = [](int i) {return i < 0;};
+	auto it = remove_if(tempPids.begin(), tempPids.end(), isNegative);
+	tempPids.erase(it, tempPids.end());
+
 	nTasks = tempPids.size();
 	if (tempPids[i] == 0) {
-		/* The "Idle" process (pid = 0) will be plotted in black. */
+		/* Pid <= 0 will be plotted in black. */
 		colors[i++] = {};
 	}
 
@@ -761,7 +767,7 @@ Graph::Graph()
   _binColors(nullptr),
   _ensembleColors(nullptr),
   _label(),
-  _zeroSuppress(false),
+  _idleSuppress(false),
   _drawBase(true)
 {}
 
@@ -783,7 +789,7 @@ Graph::Graph(kshark_trace_histo *histo, KsPlot::ColorTable *bct, KsPlot::ColorTa
   _binColors(bct),
   _ensembleColors(ect),
   _label(),
-  _zeroSuppress(false),
+  _idleSuppress(false),
   _drawBase(true)
 {
 	if (!_bins) {
@@ -1332,14 +1338,15 @@ void Graph::draw(float size)
 
 	/* Draw as vartical lines all bins containing data. */
 	for (int i = 0; i < _size; ++i)
-		if (_bins[i]._idFront >= 0 || _bins[i]._idBack >= 0)
+		if (_bins[i]._idFront >= 0 || _bins[i]._idBack >= 0 ||
+		    _bins[i]._idFront == _idlePid || _bins[i]._idBack ==_idlePid)
 			if (_bins[i]._visMask & KS_EVENT_VIEW_FILTER_MASK) {
 				_bins[i]._size = size;
 				_bins[i].draw();
 			}
 
 	auto lamCheckEnsblVal = [this] (int v) {
-		return v > 0 || (v == 0 && !this->_zeroSuppress);
+		return v > 0 || (v == _idlePid && !this->_idleSuppress);
 	};
 
 	/*
@@ -1418,106 +1425,6 @@ void Graph::draw(float size)
 				_bins[_size - 1]._base.y());
 		taskBox.draw();
 	}
-}
-
-/**
- * @brief Create a default (empty) ComboGraph.
- */
-ComboGraph::ComboGraph()
-: _host(),
-  _guest(),
-  _histoPtr(nullptr)
-{
-	_init();
-}
-
-/**
- * @brief Create a ComboGraph.
- *
- * @param histo: Input location for the model descriptor.
- * @param bct: Input location for the Hash table of bin's colors.
- * @param ect: Input location for the Hash table of ensemble's colors.
- */
-ComboGraph::ComboGraph(kshark_trace_histo *histo,
-		       KsPlot::ColorTable *bct,
-		       KsPlot::ColorTable *ect)
-: _host(histo, bct, ect),
-  _guest(histo, bct, bct),
-  _histoPtr(histo)
-{
-	_init();
-}
-
-void ComboGraph::_init()
-{
-	_guest.setDrawBase(false);
-	_guest.setZeroSuppressed(true);
-}
-
-/**
- * @brief This function will set the Y (vertical) coordinate of the
- *	  ComboGraph's base. It is safe to use this function even if the Graph
- *	  contains data.
- *
- * @param b: Y coordinate of the Graph's base in pixels.
- */
-void ComboGraph::setBase(int b)
-{
-	_guest.setBase(b);
-	_host.setBase(b + _host.height());
-}
-
-/**
- * @brief Set the vertical size (height) of the ComboGraph.
- *
- * @param h: the height of the Graph in pixels.
- */
-void ComboGraph::setHeight(int h)
-{
-	_host.setHeight(h / 2);
-	_guest.setHeight(h / 2);
-}
-
-/**
- * @brief Process a ComboGraph.
- *
- * @param sdHost: Data stream identifier of the Host.
- * @param pidHost: Process Id of the virtual CPU process in the Host.
- * @param sdGuest: Data stream identifier of the Guest.
- * @param vcpu: The virtual CPU core.
- */
-void ComboGraph::fill(int sdHost, int pidHost, int sdGuest, int vcpu)
-{
-	_host.fillTaskGraph(sdHost, pidHost);
-	_guest.fillCPUGraph(sdGuest, vcpu);
-}
-
-/**
- * @brief Draw the ComboGraph
- *
- * @param size: The size of the lines of the individual Bins.
- */
-void ComboGraph::draw(float size)
-{
-	_host.draw(size);
-	_guest.draw(size);
-}
-
-/**
- * @brief Define the appearance of the ComboGraph label.
- *
- * @param f: The font to be used to draw the labels.
- * @param colHost: The color of the Host's ComboGraph label.
- * @param colGuest: The color of the Guest's ComboGraph label.
- * @param lSize: the horizontal size of the ComboGraph's label.
- * @param hMargin: the size of the horizontal white space in pixels.
- */
-void ComboGraph::setLabelAppearance(ksplot_font *f,
-				    Color colHost, Color colGuest,
-				    int lSize, int hMargin)
-{
-	_host.setLabelAppearance(f, colHost, lSize, hMargin);
-	_guest.setLabelAppearance(f, colGuest, lSize, hMargin);
 }
 
 void VirtGap::_draw(const Color &col, float size) const

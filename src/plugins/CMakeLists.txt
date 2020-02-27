@@ -40,11 +40,11 @@ endfunction()
 set(PLUGIN_LIST "")
 BUILD_PLUGIN(NAME sched_events
              SOURCE sched_events.c SchedEvents.cpp)
-list(APPEND PLUGIN_LIST "sched_events default") # This plugin will be loaded by default
+list(APPEND PLUGIN_LIST "sched_events") # This plugin will be loaded by default
 
 BUILD_PLUGIN(NAME missed_events
              SOURCE missed_events.c MissedEvents.cpp)
-list(APPEND PLUGIN_LIST "missed_events default") # This plugin will be loaded by default
+list(APPEND PLUGIN_LIST "missed_events") # This plugin will be loaded by default
 
 BUILD_GUI_PLUGIN(NAME kvm_combo
                  MOC KVMCombo.hpp

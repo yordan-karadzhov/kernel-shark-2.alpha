@@ -10,7 +10,6 @@
 
 // KernelShark
 #include "libkshark.h"
-#include "libkshark-tepdata.h"
 
 const char *default_file = "trace.dat";
 

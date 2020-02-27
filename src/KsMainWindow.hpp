@@ -49,9 +49,9 @@ public:
 	 * @param plugin: can be the name of the plugin or the plugin's library
 	 * file (including absolute or relative path).
 	 */
-	void registerPlugin(const QString &plugin)
+	void registerPlugins(const QString &plugin)
 	{
-		_plugins.registerPlugin(plugin);
+		_plugins.registerPlugins(plugin);
 	}
 
 	/**
@@ -60,12 +60,10 @@ public:
 	 * @param plugin: can be the name of the plugin or the plugin's library
 	 * file (including absolute path).
 	 */
-	void unregisterPlugin(const QString &plugin)
+	void unregisterPlugins(const QString &plugin)
 	{
-		_plugins.unregisterPlugin(plugin);
+		_plugins.unregisterPlugins(plugin);
 	}
-
-	void registerInput(const QStringList &inputs);
 
 	void resizeEvent(QResizeEvent* event);
 
@@ -148,8 +146,6 @@ private:
 
 	QAction		_addPluginsAction;
 
-	QAction		_addUserInputAction;
-
 	QAction		_captureAction;
 
 	QAction		_addOffcetAction;
@@ -226,8 +222,6 @@ private:
 
 	void _pluginAdd();
 
-	void _inputAdd();
-
 	void _record();
 
 	void _offset();
@@ -262,8 +256,9 @@ private:
 
 	inline void _resizeEmpty() {resize(SCREEN_WIDTH * .5, FONT_HEIGHT * 3);}
 
-	void _error(const QString &text, const QString &errCode,
-		    bool resize, bool unloadPlugins);
+	void _error(const QString &text,
+		    const QString &errCode,
+		    bool resize);
 
 	void _deselectActive();
 

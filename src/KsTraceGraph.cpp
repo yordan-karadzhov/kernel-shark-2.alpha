@@ -308,10 +308,16 @@ void KsTraceGraph::_resetPointer(uint64_t ts, int sd, int cpu, int pid)
 void KsTraceGraph::_setPointerInfo(size_t i)
 {
 	kshark_entry *e = _data->rows()[i];
-	QString event(kshark_get_event_name(e));
-	QString lat(kshark_get_latency(e));
-	QString info(kshark_get_info(e));
-	QString comm(kshark_get_task(e));
+	auto lanMakeString = [] (char *buffer) {
+		QString str(buffer);
+		free(buffer);
+		return str;
+	};
+
+	QString event(lanMakeString(kshark_get_event_name(e)));
+	QString lat(lanMakeString(kshark_get_latency(e)));
+	QString info(lanMakeString(kshark_get_info(e)));
+	QString comm(lanMakeString(kshark_get_task(e)));
 	QString pointer, elidedText;
 	int labelWidth;
 	uint64_t sec, usec;
@@ -432,19 +438,17 @@ void KsTraceGraph::taskReDraw(int sd, QVector<int> v)
  */
 void KsTraceGraph::comboReDraw(int nCombos, QVector<int> v)
 {
-	KsVirtComboPlot combo;
+	KsComboPlot combo;
 
 	startOfWork(KsDataWork::EditPlotList);
 
 	_glWindow._comboPlots.clear();
 
 	for (int i = 0; i < nCombos; ++i) {
-		combo._hostStreamId = v[i * 4];
-		combo._hostPid = v[i * 4 + 1];
-		combo._guestStreamId = v[i * 4 + 2];
-		combo._vcpu = v[i * 4 + 3];
-		combo._hostBase = 0;
-		combo._vcpuBase = 0;
+		combo.resize(v.takeFirst());
+		for (auto &p: combo)
+			p << v;
+
 		_glWindow._comboPlots.append(combo);
 	}
 
