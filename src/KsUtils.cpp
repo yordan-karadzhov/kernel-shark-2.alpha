@@ -343,7 +343,7 @@ QStringList splitArguments(QString cmd)
  */
 QStringList getTepEvtName(int sd, int eventId)
 {
-	QString name(kshark_comm_from_pid(sd, eventId));
+	QString name(kshark_event_from_id(sd, eventId));
 
 	return name.split('/');
 }
