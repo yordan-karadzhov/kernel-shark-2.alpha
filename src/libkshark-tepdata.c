@@ -19,6 +19,7 @@
 
 // trace-cmd
 #include "trace-cmd/trace-cmd.h"
+#include "tracefs/tracefs.h"
 
 // KernelShark
 #include "libkshark-plugin.h"
@@ -1066,7 +1067,7 @@ int kshark_tep_init_local(struct kshark_data_stream *stream)
 	if (!tep_handle)
 		return -EFAULT;
 
-	tep_handle->tep = tracecmd_local_events(tracecmd_get_tracing_dir());
+	tep_handle->tep = tracefs_local_events(tracefs_get_tracing_dir());
 	if (!tep_handle->tep)
 		goto fail;
 
@@ -1233,5 +1234,5 @@ int kshark_tep_get_event_fields(struct kshark_data_stream *stream,
 /** Get an array of available tracer plugins. */
 char **kshark_tracecmd_local_plugins()
 {
-	return tracecmd_local_plugins(tracecmd_get_tracing_dir());
+	return tracefs_tracers(tracefs_get_tracing_dir());
 }
