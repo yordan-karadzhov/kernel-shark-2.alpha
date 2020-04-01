@@ -153,10 +153,10 @@ static void ksmodel_set_in_range_bining(struct kshark_trace_histo *histo,
 		 * interval of the dataset.
 		 */
 		last = histo->data[histo->data_size - 1];
-		if (histo->min < histo->data[0]->ts) {
+		if (histo->min < (int64_t) histo->data[0]->ts) {
 			histo->min = histo->data[0]->ts;
 			histo->max = histo->min + corrected_range;
-		} else if (histo->max > last->ts) {
+		} else if (histo->max > (int64_t) last->ts) {
 			histo->max = last->ts;
 			histo->min = histo->max - corrected_range;
 		}

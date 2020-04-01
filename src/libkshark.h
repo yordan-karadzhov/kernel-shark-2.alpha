@@ -575,10 +575,10 @@ void kshark_postprocess_entry(struct kshark_data_stream *stream,
 
 /** Search failed identifiers. */
 enum kshark_search_failed {
-	/** All entries have timestamps greater timestamps. */
+	/** All entries have greater timestamps. */
 	BSEARCH_ALL_GREATER = -1,
 
-	/** All entries have timestamps smaller timestamps. */
+	/** All entries have smaller timestamps. */
 	BSEARCH_ALL_SMALLER = -2,
 };
 
