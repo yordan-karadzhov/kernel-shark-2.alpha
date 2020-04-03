@@ -17,7 +17,8 @@
 
 #define default_input_file (char*)"trace.dat"
 
-static char *prior_input_file, *app_input_file;
+static char *prior_input_file;
+QStringList appInputFiles;
 
 void usage(const char *prog)
 {
@@ -57,7 +58,7 @@ int main(int argc, char **argv)
 			break;
 
 		case 'a':
-			app_input_file = optarg;
+			appInputFiles << QString(optarg).split(" ", QString::SkipEmptyParts);
 			break;
 
 		case 'p':
@@ -99,8 +100,8 @@ int main(int argc, char **argv)
 		if (prior_input_file)
 			ks.loadDataFile(QString(prior_input_file));
 
-		if (app_input_file)
-			ks.appendDataFile(QString(app_input_file));
+		for (auto const &f: appInputFiles)
+			ks.appendDataFile(f);
 	}
 
 	ks.show();
