@@ -1255,8 +1255,10 @@ void KsMainWindow::_load(const QString& fileName, bool append)
 
 	if (append) {
 		bool ok;
+		QString description = fileName + "\n\nOffset [usec]:";
+
 		shift = QInputDialog::getDouble(this, tr("Append Trace file"),
-						      tr("Offset [usec]:"), 0,
+						      description, 0,
 						      INT_MIN, INT_MAX, 1, &ok);
 		if (ok)
 			shift *= 1000.;
