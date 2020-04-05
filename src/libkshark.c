@@ -640,7 +640,14 @@ void kshark_filter_clear(struct kshark_context *kshark_ctx, int sd,
 		kshark_hash_id_clear(filter);
 }
 
-static bool filter_is_set(struct kshark_hash_id *filter)
+/**
+ * @brief Check if a given Id filter is set.
+ *
+ * @param filter: Input location for the Id filster.
+ *
+ * @returns True if the Id filter is set, otherwise False.
+ */
+bool kshark_this_filter_is_set(struct kshark_hash_id *filter)
 {
 	return filter && filter->count;
 }
@@ -662,12 +669,12 @@ bool kshark_filter_is_set(struct kshark_context *kshark_ctx, int sd)
 	if (!stream)
 		return false;
 
-	return filter_is_set(stream->show_task_filter) ||
-	       filter_is_set(stream->hide_task_filter) ||
-	       filter_is_set(stream->show_cpu_filter) ||
-	       filter_is_set(stream->hide_cpu_filter) ||
-	       filter_is_set(stream->show_event_filter) ||
-	       filter_is_set(stream->hide_event_filter);
+	return kshark_this_filter_is_set(stream->show_task_filter) ||
+	       kshark_this_filter_is_set(stream->hide_task_filter)  ||
+	       kshark_this_filter_is_set(stream->show_cpu_filter)   ||
+	       kshark_this_filter_is_set(stream->hide_cpu_filter)   ||
+	       kshark_this_filter_is_set(stream->show_event_filter) ||
+	       kshark_this_filter_is_set(stream->hide_event_filter);
 }
 
 /**

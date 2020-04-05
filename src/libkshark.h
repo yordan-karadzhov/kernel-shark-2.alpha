@@ -537,6 +537,8 @@ int *kshark_get_filter_ids(struct kshark_context *kshark_ctx, int sd,
 void kshark_filter_clear(struct kshark_context *kshark_ctx, int sd,
 			 int filter_id);
 
+bool kshark_this_filter_is_set(struct kshark_hash_id *filter);
+
 bool kshark_filter_is_set(struct kshark_context *kshark_ctx, int sd);
 
 

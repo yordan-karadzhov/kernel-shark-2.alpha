@@ -198,6 +198,12 @@ public:
 
 	void set(QVector<int> v);
 
+	/**
+	 * Get a vector containing all Ids (can be PID CPU Ids etc.) managed
+	 * by this widget.
+	 */
+	QVector<int> getIds() const {return _id;}
+
 	QVector<int> getCheckedIds();
 
 	QVector<int> getStates();

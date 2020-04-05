@@ -83,7 +83,11 @@ std::chrono::high_resolution_clock::now() - t0).count()
 
 namespace KsUtils {
 
+QVector<int> getCPUList(int sd);
+
 QVector<int> getPidList(int sd);
+
+QVector<int> getEventIdList(int sd);
 
 QVector<int> getFilterIds(kshark_hash_id *filter);
 

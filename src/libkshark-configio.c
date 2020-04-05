@@ -1784,11 +1784,6 @@ bool kshark_export_calib_array(struct kshark_context *kshark_ctx, int sd,
 	}
 }
 
-static bool filter_is_set(struct kshark_hash_id *filter)
-{
-	return filter && filter->count;
-}
-
 /**
  * @brief Record the current configuration of "show task" and "hide task"
  *	  filters into a Json document.
@@ -1820,13 +1815,13 @@ bool kshark_export_all_event_filters(struct kshark_context *kshark_ctx, int sd,
 
 	/* Save a filter only if it contains Id values. */
 	ret = true;
-	if (filter_is_set(stream->show_event_filter))
+	if (kshark_this_filter_is_set(stream->show_event_filter))
 		ret &= kshark_export_event_filter(stream,
 						  KS_SHOW_EVENT_FILTER,
 						  KS_SHOW_EVENT_FILTER_NAME,
 						  *conf);
 
-	if (filter_is_set(stream->hide_event_filter))
+	if (kshark_this_filter_is_set(stream->hide_event_filter))
 		ret &= kshark_export_event_filter(stream,
 						  KS_HIDE_EVENT_FILTER,
 						  KS_HIDE_EVENT_FILTER_NAME,
@@ -1866,12 +1861,12 @@ bool kshark_export_all_task_filters(struct kshark_context *kshark_ctx, int sd,
 
 	/* Save a filter only if it contains Id values. */
 	ret = true;
-	if (filter_is_set(stream->show_task_filter))
+	if (kshark_this_filter_is_set(stream->show_task_filter))
 		ret &= kshark_export_filter_array(stream->show_task_filter,
 						  KS_SHOW_TASK_FILTER_NAME,
 						  *conf);
 
-	if (filter_is_set(stream->hide_task_filter))
+	if (kshark_this_filter_is_set(stream->hide_task_filter))
 		ret &= kshark_export_filter_array(stream->hide_task_filter,
 						  KS_HIDE_TASK_FILTER_NAME,
 						  *conf);
@@ -1910,12 +1905,12 @@ bool kshark_export_all_cpu_filters(struct kshark_context *kshark_ctx, int sd,
 
 	/* Save a filter only if it contains Id values. */
 	ret = true;
-	if (filter_is_set(stream->show_cpu_filter))
+	if (kshark_this_filter_is_set(stream->show_cpu_filter))
 		ret &= kshark_export_filter_array(stream->show_cpu_filter,
 						  KS_SHOW_CPU_FILTER_NAME,
 						  *conf);
 
-	if (filter_is_set(stream->hide_cpu_filter))
+	if (kshark_this_filter_is_set(stream->hide_cpu_filter))
 		ret &= kshark_export_filter_array(stream->hide_cpu_filter,
 						  KS_HIDE_CPU_FILTER_NAME,
 						  *conf);
@@ -2139,8 +2134,6 @@ kshark_export_dstream(struct kshark_context *kshark_ctx, int sd,
 
 	return NULL;
 }
-
-
 
 /**
  * @brief Load Data Stream from a Configuration document.

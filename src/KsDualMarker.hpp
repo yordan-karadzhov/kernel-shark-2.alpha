@@ -95,7 +95,7 @@ public:
 	size_t		_pos;
 
 	/** The timestamp of the marker. */
-	uint64_t	_ts;
+	int64_t		_ts;
 
 	/** The RGB color of the marker. */
 	QColor		_color;
