@@ -713,14 +713,111 @@ void KsMainWindow::_graphFilterSync(int state)
 	_data.update();
 }
 
+void KsMainWindow::_presetCBWidget(kshark_hash_id *showFilter,
+				   kshark_hash_id *hideFilter,
+				   KsCheckBoxWidget *cbw)
+{
+	if (!kshark_this_filter_is_set(showFilter) &&
+	    !kshark_this_filter_is_set(hideFilter)) {
+		/*
+		 * No filter is set currently. All CheckBoxes of the Widget
+		 * will be checked.
+		 */
+		cbw->setDefault(true);
+	} else {
+		QVector<int> ids = cbw->getIds();
+		QVector<int>  status;
+		int n = ids.count();
+		bool show, hide;
+
+		if (kshark_this_filter_is_set(showFilter)) {
+			/*
+			 * The "show only" filter is set. The default status
+			 * of all CheckBoxes will be "unchecked".
+			 */
+			status = QVector<int>(n, false);
+			for (int i = 0; i < n; ++i) {
+				show = !!kshark_hash_id_find(showFilter,
+							         ids[i]);
+
+				hide = !!kshark_hash_id_find(hideFilter,
+							         ids[i]);
+
+				if (show && !hide) {
+					/*
+					 * Both "show" and "hide" define this
+					 * Id as visible. Set the status of
+					 * its CheckBoxes to "checked".
+					 */
+					status[i] = true;
+				}
+			}
+		} else {
+			/*
+			 * Only the "do not show" filter is set. The default
+			 * status of all CheckBoxes will be "checked".
+			 */
+			status = QVector<int>(n, true);
+			for (int i = 0; i < n; ++i) {
+				hide = !!kshark_hash_id_find(hideFilter,
+							         ids[i]);
+
+				if (hide)
+					status[i] = false;
+			}
+		}
+
+		cbw->set(status);
+	}
+}
+
+void KsMainWindow::_applyFilter(int sd, QVector<int> all, QVector<int> show,
+				std::function<void(int, QVector<int>)> posFilter,
+				std::function<void(int, QVector<int>)> negFilter)
+{
+	if (show.count() < all.count() / 2) {
+		posFilter(sd, show);
+	} else {
+		/*
+		 * It is more efficiant to apply negative (do not show) filter.
+		 */
+		QVector<int> diff;
+
+		/*
+		 * The Ids may not be sorted, because in the widgets the items
+		 * are shown sorted by name. Get those Ids sorted first.
+		 */
+		std::sort(all.begin(), all.end());
+		std::sort(show.begin(), show.end());
+
+		/*
+		 * The IDs of the "do not show" filter are given by the
+		 * difference between "all" Ids and the Ids of the "show only"
+		 * filter.
+		 */
+		std::set_difference(all.begin(), all.end(),
+				    show.begin(), show.end(),
+				    std::inserter(diff, diff.begin()));
+
+		negFilter(sd, diff);
+	}
+}
+
+/* Quiet warnings over documenting simple structures */
+//! @cond Doxygen_Suppress
+
+#define LAMBDA_FILTER(method) [=] (int sd, QVector<int> vec) {method(sd, vec);}
+
+//! @endcond
+
 void KsMainWindow::_showEvents()
 {
 	kshark_context *kshark_ctx(nullptr);
 	QVector<KsCheckBoxWidget *> cbws;
-	KsCheckBoxWidget *events_cb;
+	KsCheckBoxWidget *events_cbw;
 	KsCheckBoxDialog *dialog;
 	kshark_data_stream *stream;
-	int *streamIds, *eventIds;
+	int *streamIds;
 
 	if (!kshark_instance(&kshark_ctx))
 		return;
@@ -728,36 +825,24 @@ void KsMainWindow::_showEvents()
 	streamIds = kshark_all_streams(kshark_ctx);
 	for (int i = 0; i < kshark_ctx->n_streams; ++i) {
 		stream = kshark_ctx->stream[streamIds[i]];
-		events_cb = new KsEventsCheckBoxWidget(stream, this);
-		cbws.append(events_cb);
-
-		if (!stream->show_event_filter ||
-		    !stream->show_event_filter->count) {
-		    events_cb->setDefault(true);
-		} else {
-			/*
-			 * The event filter contains IDs. Make this visible in
-			 * the CheckBox Widget.
-			 */
-
-			eventIds = kshark_get_all_event_ids(stream);
-			QVector<int> v(stream->n_events, false);
-			for (int i = 0; i < stream->n_events; ++i) {
-				if (kshark_hash_id_find(stream->show_event_filter,
-							  eventIds[i]))
-					v[i] = true;
-			}
-
-			free(eventIds);
-			events_cb->set(v);
-		}
+		events_cbw = new KsEventsCheckBoxWidget(stream, this);
+		cbws.append(events_cbw);
+		_presetCBWidget(stream->show_event_filter,
+				stream->hide_event_filter,
+				events_cbw);
 	}
 
 	free(streamIds);
 	dialog = new KsCheckBoxDialog(cbws, this);
 
-	connect(dialog,		&KsCheckBoxDialog::apply,
-		&_data,		&KsDataStore::applyPosEventFilter);
+	auto lamFilter = [=] (int sd, QVector<int> show) {
+		QVector<int> all = KsUtils::getEventIdList(sd);
+		_applyFilter(sd, all, show,
+			     LAMBDA_FILTER(_data.applyPosEventFilter),
+			     LAMBDA_FILTER(_data.applyNegEventFilter));
+	};
+
+	connect(dialog,		&KsCheckBoxDialog::apply, lamFilter);
 
 	dialog->show();
 }
@@ -767,7 +852,7 @@ void KsMainWindow::_showTasks()
 	kshark_context *kshark_ctx(nullptr);
 	QVector<KsCheckBoxWidget *> cbws;
 	kshark_data_stream *stream;
-	KsCheckBoxWidget *tasks_cbd;
+	KsCheckBoxWidget *tasks_cbw;
 	KsCheckBoxDialog *dialog;
 	int *streamIds;
 
@@ -777,77 +862,24 @@ void KsMainWindow::_showTasks()
 	streamIds = kshark_all_streams(kshark_ctx);
 	for (int i = 0; i < kshark_ctx->n_streams; ++i) {
 			stream = kshark_ctx->stream[streamIds[i]];
-		tasks_cbd = new KsTasksCheckBoxWidget(stream, true, this);
-		cbws.append(tasks_cbd);
-
-		if (!stream->show_task_filter ||
-		    !stream->show_task_filter->count) {
-			tasks_cbd->setDefault(true);
-		} else {
-			QVector<int> pids = KsUtils::getPidList(streamIds[i]);
-			int nPids = pids.count();
-			QVector<int> v(nPids, false);
-
-			for (int i = 0; i < nPids; ++i) {
-				if (kshark_hash_id_find(stream->show_task_filter,
-							  pids[i]))
-					v[i] = true;
-			}
-
-			tasks_cbd->set(v);
-		}
+		tasks_cbw = new KsTasksCheckBoxWidget(stream, true, this);
+		cbws.append(tasks_cbw);
+		_presetCBWidget(stream->show_task_filter,
+				stream->hide_task_filter,
+				tasks_cbw);
 	}
 
 	free(streamIds);
 	dialog = new KsCheckBoxDialog(cbws, this);
 
-	connect(dialog,		&KsCheckBoxDialog::apply,
-		&_data,		&KsDataStore::applyPosTaskFilter);
+	auto lamFilter = [=] (int sd, QVector<int> show) {
+		QVector<int> all = KsUtils::getPidList(sd);
+		_applyFilter(sd, all, show,
+			     LAMBDA_FILTER(_data.applyPosTaskFilter),
+			     LAMBDA_FILTER(_data.applyNegTaskFilter));
+	};
 
-	dialog->show();
-}
-
-void KsMainWindow::_hideTasks()
-{
-	kshark_context *kshark_ctx(nullptr);
-	QVector<KsCheckBoxWidget *> cbws;
-	kshark_data_stream *stream;
-	KsCheckBoxWidget *tasks_cbd;
-	KsCheckBoxDialog *dialog;
-	int *streamIds;
-
-	if (!kshark_instance(&kshark_ctx))
-		return;
-
-	streamIds = kshark_all_streams(kshark_ctx);
-	for (int i = 0; i < kshark_ctx->n_streams; ++i) {
-		stream = kshark_ctx->stream[streamIds[i]];
-		tasks_cbd = new KsTasksCheckBoxWidget(stream, false, this);
-		cbws.append(tasks_cbd);
-
-		if (!stream->hide_task_filter ||
-		    !stream->hide_task_filter->count) {
-			tasks_cbd->setDefault(false);
-		} else {
-			QVector<int> pids = KsUtils::getPidList(streamIds[i]);
-			int nPids = pids.count();
-			QVector<int> v(nPids, false);
-
-			for (int i = 0; i < nPids; ++i) {
-				if (kshark_hash_id_find(stream->hide_task_filter,
-							  pids[i]))
-					v[i] = true;
-			}
-
-			tasks_cbd->set(v);
-		}
-	}
-
-	free(streamIds);
-	dialog = new KsCheckBoxDialog(cbws, this);
-
-	connect(dialog,		&KsCheckBoxDialog::apply,
-		&_data,		&KsDataStore::applyNegTaskFilter);
+	connect(dialog,		&KsCheckBoxDialog::apply, lamFilter);
 
 	dialog->show();
 }
@@ -857,7 +889,7 @@ void KsMainWindow::_showCPUs()
 	kshark_context *kshark_ctx(nullptr);
 	QVector<KsCheckBoxWidget *> cbws;
 	kshark_data_stream *stream;
-	KsCheckBoxWidget *cpus_cbd;
+	KsCheckBoxWidget *cpus_cbw;
 	KsCheckBoxDialog *dialog;
 	int *streamIds;
 
@@ -867,69 +899,24 @@ void KsMainWindow::_showCPUs()
 	streamIds = kshark_all_streams(kshark_ctx);
 	for (int i = 0; i < kshark_ctx->n_streams; ++i) {
 		stream = kshark_ctx->stream[streamIds[i]];
-		cpus_cbd = new KsCPUCheckBoxWidget(stream, this);
-		cbws.append(cpus_cbd);
-
-		if (!stream->show_cpu_filter ||
-		    !stream->show_cpu_filter->count) {
-			cpus_cbd->setDefault(true);
-		} else {
-			QVector<int> v(stream->n_cpus, false);
-			for (int i = 0; i < stream->n_cpus; ++i) {
-				if (kshark_hash_id_find(stream->show_cpu_filter, i))
-					v[i] = true;
-			}
-
-			cpus_cbd->set(v);
-		}
+		cpus_cbw = new KsCPUCheckBoxWidget(stream, this);
+		cbws.append(cpus_cbw);
+		_presetCBWidget(stream->show_task_filter,
+				stream->hide_task_filter,
+				cpus_cbw);
 	}
 
 	free(streamIds);
 	dialog = new KsCheckBoxDialog(cbws, this);
 
-	connect(dialog,		&KsCheckBoxDialog::apply,
-		&_data,		&KsDataStore::applyPosCPUFilter);
+	auto lamFilter = [=] (int sd, QVector<int> show) {
+		QVector<int> all = KsUtils::getCPUList(sd);
+		_applyFilter(sd, all, show,
+			     LAMBDA_FILTER(_data.applyPosCPUFilter),
+			     LAMBDA_FILTER(_data.applyNegCPUFilter));
+	};
 
-	dialog->show();
-}
-
-void KsMainWindow::_hideCPUs()
-{
-	kshark_context *kshark_ctx(nullptr);
-	QVector<KsCheckBoxWidget *> cbws;
-	kshark_data_stream *stream;
-	KsCheckBoxWidget *cpus_cbd;
-	KsCheckBoxDialog *dialog;
-	int *streamIds;
-
-	if (!kshark_instance(&kshark_ctx))
-		return;
-
-	streamIds = kshark_all_streams(kshark_ctx);
-	for (int i = 0; i < kshark_ctx->n_streams; ++i) {
-		stream = kshark_ctx->stream[streamIds[i]];
-		cpus_cbd = new KsCPUCheckBoxWidget(stream, this);
-		cbws.append(cpus_cbd);
-
-		if (!stream->hide_cpu_filter ||
-		    !stream->hide_cpu_filter->count) {
-			cpus_cbd->setDefault(false);
-		} else {
-			QVector<int> v(stream->n_cpus, false);
-			for (int i = 0; i < stream->n_cpus; ++i) {
-				if (kshark_hash_id_find(stream->hide_cpu_filter, i))
-					v[i] = true;
-			}
-
-			cpus_cbd->set(v);
-		}
-	}
-
-	free(streamIds);
-	dialog = new KsCheckBoxDialog(cbws, this);
-
-	connect(dialog,		&KsCheckBoxDialog::apply,
-		&_graph,	&KsTraceGraph::cpuReDraw);
+	connect(dialog,		&KsCheckBoxDialog::apply, lamFilter);
 
 	dialog->show();
 }

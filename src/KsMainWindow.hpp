@@ -196,15 +196,19 @@ private:
 
 	void _graphFilterSync(int state);
 
+	void _presetCBWidget(kshark_hash_id *showFilter,
+			     kshark_hash_id *hideFilter,
+			     KsWidgetsLib::KsCheckBoxWidget *cbw);
+
+	void _applyFilter(int sd, QVector<int> all, QVector<int> show,
+			  std::function<void(int, QVector<int>)> posFilter,
+			  std::function<void(int, QVector<int>)> negFilter);
+
 	void _showEvents();
 
 	void _showTasks();
 
-	void _hideTasks();
-
 	void _showCPUs();
-
-	void _hideCPUs();
 
 	void _advancedFiltering();
 
