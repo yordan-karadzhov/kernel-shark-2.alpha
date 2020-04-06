@@ -151,10 +151,7 @@ void NotDone::handleInput(KsSearchFSM* sm, sm_input_t input)
 		sm->lockSearchPanel();
 		sm->updateCondition();
 		sm->progressBarVisible(true);
-
-		if (column == KsViewModel::TRACE_VIEW_COL_INFO ||
-		    column == KsViewModel::TRACE_VIEW_COL_LAT)
-			sm->searchStopVisible(true);
+		sm->searchStopVisible(true);
 
 		sm->changeState(std::shared_ptr<InProgress>(new InProgress));
 		break;
@@ -177,6 +174,11 @@ void Paused::handleInput(KsSearchFSM* sm, sm_input_t input)
 		sm->lockSearchPanel();
 		sm->searchStopVisible(true);
 		sm->searchRestartVisible(false);
+
+		if (sm->column() != KsViewModel::TRACE_VIEW_COL_INFO &&
+		    sm->column() != KsViewModel::TRACE_VIEW_COL_LAT)
+			sm->_searchCountLabel.setText("");
+
 		sm->changeState(std::shared_ptr<InProgress>(new InProgress));
 		break;
 
