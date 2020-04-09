@@ -145,8 +145,8 @@ KsDualMarkerSM::KsDualMarkerSM(QWidget *parent)
 {
 	QString styleSheetA, styleSheetB;
 
-	_buttonA.setFixedWidth(STRING_WIDTH(" Marker A "));
-	_buttonB.setFixedWidth(STRING_WIDTH(" Marker B "));
+	_buttonA.setFixedWidth(STRING_WIDTH(" Marker A ") + FONT_WIDTH);
+	_buttonB.setFixedWidth(STRING_WIDTH(" Marker B ") + FONT_WIDTH);
 
 	for (auto const &l: {&_labelMA, &_labelMB, &_labelDelta}) {
 		l->setFrameStyle(QFrame::Panel | QFrame::Sunken);
