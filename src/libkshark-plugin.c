@@ -331,8 +331,7 @@ kshark_register_plugin(struct kshark_context *kshark_ctx,
 	return plugin;
 
  fail:
-	fprintf(stderr, "cannot load plugin '%s'\n",
-		plugin->file);
+	fprintf(stderr, "cannot load plugin '%s'\n", file);
 
 	if (plugin->handle)
 		dlclose(plugin->handle);
