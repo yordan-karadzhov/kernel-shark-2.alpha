@@ -985,6 +985,46 @@ const char *tep_plugin_names[] = {"sched_events",
 
 #define LINUX_IDLE_TASK_PID	0
 
+/** Find a host stream from the same tracing session, that has guest information */
+static
+struct tracecmd_input *kshark_tep_find_merge_peer(struct kshark_context *kshark_ctx,
+						  struct tracecmd_input *handle)
+{
+	struct tracecmd_input *peer_handle = NULL;
+	struct kshark_data_stream *peer_stream;
+	unsigned long long trace_id;
+	int *stream_ids = NULL;
+	int ret;
+	int i;
+
+	trace_id = tracecmd_get_traceid(handle);
+	if (!trace_id)
+		goto out;
+
+	stream_ids = kshark_all_streams(kshark_ctx);
+	if (!stream_ids)
+		goto out;
+	for (i = 0; i < kshark_ctx->n_streams; i++) {
+		peer_stream = kshark_get_data_stream(kshark_ctx, stream_ids[i]);
+		if (!peer_stream || peer_stream->format != KS_TEP_DATA)
+			continue;
+		peer_handle = kshark_get_tep_input(peer_stream);
+		if (!peer_handle)
+			continue;
+		ret = tracecmd_get_guest_cpumap(peer_handle, trace_id,
+						NULL, NULL, NULL);
+		if (!ret)
+			break;
+	}
+
+	if (i == kshark_ctx->n_streams)
+		peer_handle = NULL;
+
+out:
+	free(stream_ids);
+	return peer_handle;
+}
+
 /** Initialize the FTRACE data input (from file). */
 int kshark_tep_init_input(struct kshark_data_stream *stream,
 			  const char *file)
@@ -992,8 +1032,10 @@ int kshark_tep_init_input(struct kshark_data_stream *stream,
 	struct kshark_context *kshark_ctx = NULL;
 	struct tepdata_handle *tep_handle;
 	struct kshark_plugin_list *plugin;
+	struct tracecmd_input *merge_peer;
 	struct tep_event *event;
 	int i, n_tep_plugins;
+	int ret;
 
 	if (!kshark_instance(&kshark_ctx) || !init_thread_seq())
 		return -EEXIST;
@@ -1009,8 +1051,24 @@ int kshark_tep_init_input(struct kshark_data_stream *stream,
 	if (!tep_handle)
 		return -EFAULT;
 
-	tep_handle->input = tracecmd_open(file);
+	/** Open the tracing file, parse headers and create trace input context */
+	tep_handle->input = tracecmd_open_head(file);
 	if (!tep_handle->input) {
+		free(tep_handle);
+		stream->interface.handle = NULL;
+		return -EEXIST;
+	}
+
+	/** Find a merge peer from the same tracing session */
+	merge_peer = kshark_tep_find_merge_peer(kshark_ctx, tep_handle->input);
+	if (merge_peer)
+		tracecmd_pair_peer(tep_handle->input, merge_peer);
+
+	/** Read the racing data from the file */
+	ret = tracecmd_init_data(tep_handle->input);
+
+	if (ret < 0) {
+		tracecmd_close(tep_handle->input);
 		free(tep_handle);
 		stream->interface.handle = NULL;
 		return -EEXIST;
