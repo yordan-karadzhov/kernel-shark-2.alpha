@@ -15,10 +15,6 @@
 #include "KsMainWindow.hpp"
 #include "KsWidgetsLib.hpp"
 
-typedef QVector<QPair<int, int>> VCPUVector;
-
-typedef QMap<int, VCPUVector> HostMap;
-
 /**
  * The KsVCPUCheckBoxWidget class provides a widget for selecting CPU plots to
  * show.
@@ -27,7 +23,8 @@ struct KsVCPUCheckBoxWidget : public KsWidgetsLib::KsCheckBoxTreeWidget
 {
 	explicit KsVCPUCheckBoxWidget(QWidget *parent = nullptr);
 
-	void update(int sdHost, VCPUVector vcpus);
+	void update(int GuestId,
+		    struct kshark_host_guest_map *gMap, int gMapCount);
 };
 
 /**
@@ -39,17 +36,16 @@ class KsComboPlotDialog : public QDialog
 	Q_OBJECT
 public:
 	explicit KsComboPlotDialog(QWidget *parent = nullptr);
-
-	void update(int sdHost, VCPUVector vcpus);
+	~KsComboPlotDialog();
+	void update();
 
 signals:
 	/** Signal emitted when the "Apply" button is pressed. */
 	void apply(int sd, QVector<int>);
 
 private:
-	int				_sdHost;
-
-	VCPUVector			_vcpus;
+	int				_guestMapCount;
+	struct kshark_host_guest_map 	*_guestMap;
 
 	KsVCPUCheckBoxWidget		_vcpuTree;
 

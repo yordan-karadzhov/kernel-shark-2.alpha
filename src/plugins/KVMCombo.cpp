@@ -67,20 +67,30 @@ KsVCPUCheckBoxWidget::KsVCPUCheckBoxWidget(QWidget *parent)
 	_initTree();
 }
 
-void KsVCPUCheckBoxWidget::update(int sdHost, VCPUVector vcpus)
+void KsVCPUCheckBoxWidget::update(int GuestId,
+				  kshark_host_guest_map *gMap, int gMapCount)
 {
-	int nVCPUs = vcpus.count();
 	KsPlot::ColorTable colors;
+	int j;
+
+	for (j = 0; j < gMapCount; j++)
+		if (gMap[j].guest_id == GuestId)
+			break;
+	if (j == gMapCount)
+		return;
 
 	_tree.clear();
-	_id.resize(nVCPUs);
-	_cb.resize(nVCPUs);
+	_id.resize(gMap[j].vcpu_count);
+	_cb.resize(gMap[j].vcpu_count);
 	colors = KsPlot::getCPUColorTable();
 
-	for (int i = 0; i < nVCPUs; ++i) {
+	for (int i = 0; i < gMap[j].vcpu_count; ++i) {
+		QString strCPU = QLatin1String("vCPU ") + QString::number(i);
+		strCPU += (QLatin1String("\t<") + QLatin1String(gMap[j].guest_name) + QLatin1Char('>'));
+
 		QTreeWidgetItem *cpuItem = new QTreeWidgetItem;
 		cpuItem->setText(0, "  ");
-		cpuItem->setText(1, QString("vCPU %1").arg(vcpus.at(i).second));
+		cpuItem->setText(1, strCPU);
 		cpuItem->setCheckState(0, Qt::Checked);
 		cpuItem->setBackgroundColor(0, QColor(colors[i].r(),
 						      colors[i].g(),
@@ -166,26 +176,41 @@ KsComboPlotDialog::KsComboPlotDialog(QWidget *parent)
 		this,			SLOT(_guestStreamChanged(const QString &)));
 
 	setLayout(&_topLayout);
+
+	_guestMapCount = 0;
+	_guestMap = nullptr;
 }
 
-void KsComboPlotDialog::update(int sdHost, VCPUVector vcpus)
+KsComboPlotDialog::~KsComboPlotDialog()
+{
+	kshark_tracecmd_free_hostguest_map(_guestMap, _guestMapCount);
+}
+
+void KsComboPlotDialog::update()
 {
 	kshark_context *kshark_ctx(nullptr);
-	int sd, *streamIds;
+	int ret;
+	int sd;
+	int i;
 
 	if (!kshark_instance(&kshark_ctx))
 		return;
 
-	_sdHost = sdHost;
-	_vcpus = vcpus;
+	kshark_tracecmd_free_hostguest_map(_guestMap, _guestMapCount);
+	_guestMap = nullptr;
+	_guestMapCount = 0;
+	ret = kshark_tracecmd_get_hostguest_mapping(&_guestMap);
+	if (ret > 0)
+		_guestMapCount = ret;
+
 	KsUtils::setElidedText(&_hostFileLabel,
-			       kshark_ctx->stream[sdHost]->file,
+			       kshark_ctx->stream[_guestMap[0].host_id]->file,
 			       Qt::ElideLeft, LABEL_WIDTH);
 
-	streamIds = kshark_all_streams(kshark_ctx);
-	for (int i = 0; i < kshark_ctx->n_streams; ++i) {
-		sd = streamIds[i];
-		if (sd == sdHost)
+	_guestStreamComboBox.clear();
+	for (i = 0; i < _guestMapCount; i++) {
+		sd = _guestMap[i].guest_id;
+		if (sd >= kshark_ctx->n_streams)
 			continue;
 
 		_guestStreamComboBox.addItem(kshark_ctx->stream[sd]->file,
@@ -198,8 +223,8 @@ void KsComboPlotDialog::update(int sdHost, VCPUVector vcpus)
 				this,		&KsComboPlotDialog::_applyPress);
 	}
 
-	_vcpuTree.update(sdHost, vcpus);
-	free(streamIds);
+	sd = _guestStreamComboBox.currentData().toInt();
+	_vcpuTree.update(sd, _guestMap, _guestMapCount);
 }
 
 void KsComboPlotDialog::_applyPress()
@@ -208,6 +233,16 @@ void KsComboPlotDialog::_applyPress()
 	QVector<int> allCombosVec;
 	KsComboPlot combo(2);
 	int nPlots(0);
+	int GuestId;
+	int j;
+
+	GuestId = _guestStreamComboBox.currentData().toInt();
+	for (j = 0; j < _guestMapCount; j++)
+		if (_guestMap[j].guest_id == GuestId)
+			break;
+	if (j == _guestMapCount)
+		return;
+
 
 	/*
 	 * Disconnect _applyButton. This is done in order to protect
@@ -216,17 +251,20 @@ void KsComboPlotDialog::_applyPress()
 	disconnect(_applyButtonConnection);
 
 	for (auto const &i: cbVec) {
+		if (i >= _guestMap[j].vcpu_count)
+			continue;
+
 		allCombosVec.append(2);
 
-		combo[0]._streamId = _guestStreamComboBox.currentData().toInt();
-		combo[0]._id = _vcpus.at(i).second;
+		combo[0]._streamId = _guestMap[j].guest_id;
+		combo[0]._id = i;
 		combo[0]._type = KsPlot::KSHARK_CPU_DRAW |
 				 KsPlot::KSHARK_GUEST_DRAW;
 
 		combo[0] >> allCombosVec;
 
-		combo[1]._streamId = _sdHost;
-		combo[1]._id = _vcpus.at(i).first;
+		combo[1]._streamId = _guestMap[j].host_id;
+		combo[1]._id = _guestMap[j].cpu_pid[i];
 		combo[1]._type = KsPlot::KSHARK_TASK_DRAW |
 				 KsPlot::KSHARK_HOST_DRAW;
 
@@ -239,66 +277,8 @@ void KsComboPlotDialog::_applyPress()
 
 void KsComboPlotDialog::_guestStreamChanged(const QString &sdStr)
 {
-
-}
-
-static int getVCPU(plugin_kvm_context *plugin_ctx,
-		   kshark_trace_histo *histo,
-		   int sdHost, int pid)
-{
-	int values[2] = {plugin_ctx->vm_entry_id, pid};
-	const kshark_entry *entry;
-	unsigned long long vcpu;
-
-	for (int b = 0; b < histo->n_bins; ++b) {
-		entry = ksmodel_get_entry_front(histo,
-						b, false,
-						kshark_match_event_and_pid,
-						sdHost, values,
-						nullptr,
-						nullptr);
-		if (!entry)
-			continue;
-
-		if (kshark_read_event_field(entry, "vcpu_id", &vcpu) >= 0)
-			return vcpu;
-	}
-
-	return -1;
-}
-
-HostMap getVCPUPids(kshark_context *kshark_ctx, kshark_trace_histo *histo)
-{
-	int sd, n_vcpus, *streamIds, *pids;
-	plugin_kvm_context *plugin_ctx;
-	HostMap hMap;
-
-	streamIds = kshark_all_streams(kshark_ctx);
-	for (int i = 0; i < kshark_ctx->n_streams; ++i) {
-		sd = streamIds[i];
-		plugin_ctx = get_kvm_context(sd);
-		if (!plugin_ctx)
-			continue;
-
-		/* This stream contains KVM events. */
-		n_vcpus = plugin_ctx->vcpu_pids->count;
-		if (n_vcpus) {
-			VCPUVector vcpus(n_vcpus);
-			pids = kshark_hash_ids(plugin_ctx->vcpu_pids);
-			for (int j = 0; j < n_vcpus; ++j) {
-				vcpus[j].first = pids[j];
-				vcpus[j].second = getVCPU(plugin_ctx,
-							  histo,
-							  sd, pids[j]);
-			}
-
-			free(pids);
-			hMap[sd] = vcpus;
-		}
-	}
-
-	free(streamIds);
-	return hMap;
+	int GuestId = _guestStreamComboBox.currentData().toInt();
+	_vcpuTree.update(GuestId, _guestMap, _guestMapCount);
 }
 
 KsComboPlotDialog dialog;
@@ -307,18 +287,11 @@ QMetaObject::Connection dialogConnection;
 static void showDialog(KsMainWindow *ks)
 {
 	kshark_context *kshark_ctx(nullptr);
-	kshark_trace_histo *histo;
-	VCPUVector vcpus;
-	HostMap hMap;
-	int sdHost;
 
 	if (!kshark_instance(&kshark_ctx))
 		return;
 
-	histo = ks->graphPtr()->glPtr()->model()->histo();
-	hMap = getVCPUPids(kshark_ctx, histo);
-
-	if (kshark_ctx->n_streams < 2 || hMap.count() != 1) {
+	if (kshark_ctx->n_streams < 2) {
 		QString err("Data from one Host and at least one Guest is required.");
 		QMessageBox msgBox;
 		msgBox.critical(nullptr, "Error", err);
@@ -326,10 +299,7 @@ static void showDialog(KsMainWindow *ks)
 		return;
 	}
 
-	sdHost = hMap.begin().key();
-	vcpus = hMap.begin().value();
-
-	dialog.update(sdHost, vcpus);
+	dialog.update();
 
 	if (!dialogConnection) {
 		dialogConnection =

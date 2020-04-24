@@ -22,6 +22,7 @@
 #include "tracefs/tracefs.h"
 
 // KernelShark
+#include "libkshark.h"
 #include "libkshark-plugin.h"
 #include "libkshark-tepdata.h"
 
@@ -1293,4 +1294,119 @@ int kshark_tep_get_event_fields(struct kshark_data_stream *stream,
 char **kshark_tracecmd_local_plugins()
 {
 	return tracefs_tracers(tracefs_get_tracing_dir());
+}
+
+/**
+ * @brief Free an array, allocated by kshark_tracecmd_get_hostguest_mapping() API
+ *
+ *
+ * @param map: Array, allocated by kshark_tracecmd_get_hostguest_mapping() API
+ * @param count: Number of entries in the array
+ *
+ */
+void kshark_tracecmd_free_hostguest_map(struct kshark_host_guest_map *map, int count)
+{
+	int i;
+
+	if (!map)
+		return;
+	for (i = 0; i < count; i++) {
+		free(map[i].guest_name);
+		free(map[i].cpu_pid);
+		memset(&map[i], 0, sizeof(*map));
+	}
+	free(map);
+}
+
+/**
+ * @brief Get mapping of guest VCPU to host task, running that VCPU.
+ *	  Array of mappings for each guest is allocated and returned
+ *	  in map input parameter.
+ *
+ *
+ * @param map: Returns allocated array of kshark_host_guest_map structures, each
+ *	       one describing VCPUs mapping of one guest.
+ *
+ * @return The number of entries in the *map array, or a negative error code on
+ *	   failure.
+ */
+int kshark_tracecmd_get_hostguest_mapping(struct kshark_host_guest_map **map)
+{
+	struct kshark_host_guest_map *gmap = NULL;
+	struct tracecmd_input *peer_handle = NULL;
+	struct kshark_data_stream *peer_stream;
+	struct tracecmd_input *guest_handle = NULL;
+	struct kshark_data_stream *guest_stream;
+	struct kshark_context *kshark_ctx = NULL;
+	unsigned long long trace_id;
+	const char *name;
+	int vcpu_count;
+	const int *cpu_pid;
+	int *stream_ids;
+	int i, j, k;
+	int count = 0;
+	int ret;
+
+	if (!map || !kshark_instance(&kshark_ctx))
+		return -EFAULT;
+	if (*map)
+		return -EEXIST;
+
+	stream_ids = kshark_all_streams(kshark_ctx);
+	for (i = 0; i < kshark_ctx->n_streams; i++) {
+		guest_stream = kshark_get_data_stream(kshark_ctx, stream_ids[i]);
+		if (!guest_stream || guest_stream->format != KS_TEP_DATA)
+			continue;
+		guest_handle = kshark_get_tep_input(guest_stream);
+		if (!guest_handle)
+			continue;
+		trace_id = tracecmd_get_traceid(guest_handle);
+		if (!trace_id)
+			continue;
+		for (j = 0; j < kshark_ctx->n_streams; j++) {
+			if (stream_ids[i] == stream_ids[j])
+				continue;
+			peer_stream = kshark_get_data_stream(kshark_ctx, stream_ids[j]);
+			if (!peer_stream || peer_stream->format != KS_TEP_DATA)
+				continue;
+			peer_handle = kshark_get_tep_input(peer_stream);
+			if (!peer_handle)
+				continue;
+			ret = tracecmd_get_guest_cpumap(peer_handle, trace_id,
+							&name, &vcpu_count, &cpu_pid);
+			if (!ret && vcpu_count) {
+				gmap = realloc(*map,
+					       (count + 1) * sizeof(struct kshark_host_guest_map));
+				if (!gmap)
+					goto mem_error;
+				*map = gmap;
+				memset(&gmap[count], 0, sizeof(struct kshark_host_guest_map));
+				count++;
+				gmap[count - 1].guest_id = stream_ids[i];
+				gmap[count - 1].host_id = stream_ids[j];
+				gmap[count - 1].guest_name = strdup(name);
+				if (!gmap[count - 1].guest_name)
+					goto mem_error;
+				gmap[count - 1].vcpu_count = vcpu_count;
+				gmap[count - 1].cpu_pid = malloc(sizeof(int) * vcpu_count);
+				if (!gmap[count - 1].cpu_pid)
+					goto mem_error;
+				for (k = 0; k < vcpu_count; k++)
+					gmap[count - 1].cpu_pid[k] = cpu_pid[k];
+				break;
+			}
+		}
+	}
+
+	free(stream_ids);
+	return count;
+
+mem_error:
+	free(stream_ids);
+	if (*map) {
+		kshark_tracecmd_free_hostguest_map(*map, count);
+		*map = NULL;
+	}
+
+	return -ENOMEM;
 }

@@ -59,6 +59,26 @@ struct tep_record;
 ssize_t kshark_load_tep_records(struct kshark_context *kshark_ctx, int sd,
 				struct tep_record ***data_rows);
 
+struct kshark_host_guest_map {
+	/** ID of guest stream */
+	int guest_id;
+
+	/** ID of host stream */
+	int host_id;
+
+	/** Guest name */
+	char *guest_name;
+
+	/** Number of guest's CPUs in *cpu_pid array */
+	int vcpu_count;
+
+	/** Array of host task PIDs, index is the VCPU id */
+	int *cpu_pid;
+};
+
+void kshark_tracecmd_free_hostguest_map(struct kshark_host_guest_map *map, int count);
+int kshark_tracecmd_get_hostguest_mapping(struct kshark_host_guest_map **map);
+
 #ifdef __cplusplus
 }
 #endif
