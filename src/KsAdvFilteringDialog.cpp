@@ -364,6 +364,7 @@ KsAdvFilteringDialog::_getEventFormatFields(int eventId)
 {
 	kshark_context *kshark_ctx(NULL);
 	kshark_data_stream *stream;
+	kshark_entry entry;
 	QStringList fieldList;
 	char **fields_str;
 	int n_fields;
@@ -375,7 +376,9 @@ KsAdvFilteringDialog::_getEventFormatFields(int eventId)
 	if (!stream || stream->format != KS_TEP_DATA)
 		return {};
 
-	n_fields = kshark_tep_get_event_fields(stream, eventId, &fields_str);
+	entry.event_id = eventId;
+	n_fields = stream->interface.get_all_field_names(stream, &entry,
+							 &fields_str);
 	for (int i = 0; i < n_fields; ++i) {
 		fieldList << fields_str[i];
 		free(fields_str[i]);

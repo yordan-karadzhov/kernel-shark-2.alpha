@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LGPL-2.1
 
 /*
- * Copyright (C) 2018 VMware Inc, Yordan Karadzhov <y.karadz@gmail.com>
+ * Copyright (C) 2018 VMware Inc, Yordan Karadzhov (VMware) <y.karadz@gmail.com>
  */
 
 /**
@@ -11,179 +11,36 @@
  *	     preempted by another task.
  */
 
-// C++
-#include<iostream>
-
-// C++ 11
-#include<functional>
-#include<unordered_set>
-
 // KernelShark
 #include "libkshark.h"
 #include "plugins/sched_events.h"
 #include "KsPlotTools.hpp"
 #include "KsPlugins.hpp"
 
-//! @cond Doxygen_Suppress
+using namespace KsPlot;
 
-#define PLUGIN_MIN_BOX_SIZE 4
-
-#define KS_TASK_COLLECTION_MARGIN 25
-
-//! @endcond
-
-/** Sched Event identifier. */
-enum class SchedEvent {
-	/** Sched Switch Event. */
-	Switch,
-
-	/** Sched Wakeup Event. */
-	Wakeup,
-};
-
-static void pluginDraw(kshark_context *kshark_ctx,
-		       kshark_trace_histo *histo,
-		       kshark_entry_collection *col,
-		       SchedEvent e,
-		       int sd, int pid,
-		       KsPlot::Graph *graph,
-		       KsPlot::PlotObjList *shapes)
+static PlotObject *makeShape(std::vector<const Graph *> graph,
+			     std::vector<int> bin,
+			     std::vector<int64_t>,
+			     Color col, float size)
 {
-	const kshark_entry *entryClose, *entryOpen, *entryME;
-	ssize_t indexClose(0), indexOpen(0), indexME(0);
-	std::function<void(int)> ifSchedBack;
-	KsPlot::Rectangle *rec = nullptr;
-	int height = graph->height() * .3;
+	Rectangle *rec = new KsPlot::Rectangle;
+	Point p0 = graph[0]->getBin(bin[0])._base;
+	Point p1 = graph[0]->getBin(bin[1])._base;
+	int height = graph[0]->height() * .3;
 
-	auto openBox = [&] (const KsPlot::Point &p)
-	{
-		/*
-		 * First check if we already have an open box. If we don't
-		 * have, open a new one.
-		 */
-		if (!rec)
-			rec = new KsPlot::Rectangle;
+	rec->setFill(false);
+	rec->setPoint(0, p0.x() - 1, p0.y() - height);
+	rec->setPoint(1, p0.x() - 1, p0.y() - 1);
 
-		if (e == SchedEvent::Switch) {
-			/* Red box. */
-			rec->_color = KsPlot::Color(255, 0, 0);
-		} else {
-			/* Green box. */
-			rec->_color = KsPlot::Color(0, 255, 0);
-		}
+	rec->setPoint(3, p1.x() - 1, p1.y() - height);
+	rec->setPoint(2, p1.x() - 1, p1.y() - 1);
 
-		rec->setFill(false);
+	rec->_size = size;
+	rec->_color = col;
 
-		rec->setPoint(0, p.x() - 1, p.y() - height);
-		rec->setPoint(1, p.x() - 1, p.y() - 1);
-	};
-
-	auto closeBox = [&] (const KsPlot::Point &p)
-	{
-		if (rec == nullptr)
-			return;
-
-		int boxSize = p.x() - rec->getPoint(0)->x;
-		if (boxSize < PLUGIN_MIN_BOX_SIZE) {
-			/* This box is too small. Don't try to plot it. */
-			delete rec;
-			rec = nullptr;
-			return;
-		}
-
-		rec->setPoint(3, p.x() - 1, p.y() - height);
-		rec->setPoint(2, p.x() - 1, p.y() - 1);
-
-		shapes->push_front(rec);
-		rec = nullptr;
-	};
-
-	for (int bin = 0; bin < graph->size(); ++bin) {
-		/*
-		 * Starting from the first element in this bin, go forward
-		 * in time until you find a trace entry that satisfies the
-		 * condition defined by kshark_match_pid.
-		 */
-		entryClose = ksmodel_get_entry_back(histo, bin, false,
-						    plugin_switch_match_entry_pid,
-						    sd, &pid, col, &indexClose);
-
-		entryME = ksmodel_get_task_missed_events(histo,
-							 bin,
-							 sd, pid,
-							 col,
-							 &indexME);
-
-		if (e == SchedEvent::Switch) {
-			/*
-			 * Starting from the last element in this bin, go backward
-			 * in time until you find a trace entry that satisfies the
-			 * condition defined by plugin_switch_match_rec_pid.
-			 */
-			entryOpen =
-				ksmodel_get_entry_back(histo, bin, false,
-						       plugin_switch_match_rec_pid,
-						       sd, &pid, col, &indexOpen);
-
-		} else {
-			/*
-			 * Starting from the last element in this bin, go backward
-			 * in time until you find a trace entry that satisfies the
-			 * condition defined by plugin_wakeup_match_rec_pid.
-			 */
-			entryOpen =
-				ksmodel_get_entry_back(histo, bin, false,
-						       plugin_wakeup_match_rec_pid,
-						       sd, &pid,
-						       col,
-						       &indexOpen);
-
-			if (entryOpen) {
-				int cpu = ksmodel_get_cpu_back(histo, bin,
-								      sd, pid,
-								      false,
-								      col,
-								      nullptr);
-				if (cpu >= 0) {
-					/*
-					 * The task is already running. Ignore
-					 * this wakeup event.
-					 */
-					entryOpen = nullptr;
-				}
-			}
-		}
-
-		if (rec) {
-			if (entryME || entryClose) {
-				/* Close the box in this bin. */
-				closeBox(graph->getBin(bin)._base);
-				if (entryOpen &&
-				    indexME < indexOpen &&
-				    indexClose < indexOpen) {
-					/*
-					 * We have a Sched switch entry that
-					 * comes after (in time) the closure of
-					 * the previous box. We have to open a
-					 * new box in this bin.
-					 */
-					openBox(graph->getBin(bin)._base);
-				}
-			}
-		} else {
-			if (entryOpen &&
-			    (!entryClose || indexClose < indexOpen)) {
-				/* Open a new box in this bin. */
-				openBox(graph->getBin(bin)._base);
-			}
-		}
-	}
-
-	if (rec)
-		delete rec;
-
-	return;
-}
+	return rec;
+};
 
 /*
  * Ideally, the sched_switch has to be the last trace event recorded before the
@@ -197,49 +54,32 @@ static void pluginDraw(kshark_context *kshark_ctx,
  * of the entry (this field is set during the first pass) to search for trailing
  * events after the "sched_switch".
  */
-static void secondPass(kshark_entry **data,
-		       kshark_entry_collection *col,
-		       int sd, int pid)
+static void secondPass(plugin_sched_context *plugin_ctx)
 {
-	if (!col)
-		return;
+	kshark_data_container *cSS;
+	kshark_entry *e;
+	int pid_rec;
 
-	const kshark_entry *e;
-	kshark_entry *last;
-	int first, n;
-	ssize_t index;
-
-	/* Loop over the intervals of the data collection. */
-	for (size_t i = 0; i < col->size; ++i) {
-		first = col->break_points[i];
-		n = first - col->resume_points[i];
-
-		kshark_entry_request *req =
-			kshark_entry_request_alloc(first, n,
-						   plugin_switch_match_rec_pid,
-						   sd, &pid,
-						   false,
-						   KS_GRAPH_VIEW_FILTER_MASK);
-
-		e = kshark_get_entry_back(req, data, &index);
-		free(req);
-
-		if (!e || index < 0) {
-			/* No sched_switch event in this interval. */
+	cSS = plugin_ctx->ss_data;
+	for (ssize_t i = 0; i < cSS->size; ++i) {
+		pid_rec = plugin_sched_get_pid(cSS->data[i]->field);
+		e = cSS->data[i]->entry;
+		if (!e->next || e->pid == 0 ||
+		    e->event_id == e->next->event_id ||
+		    pid_rec != e->next->pid)
 			continue;
-		}
 
 		/* Find the very last trailing event. */
-		for (last = data[index]; last->next; last = last->next) {
-			if (last->next->pid != pid) {
+		for (; e->next; e = e->next) {
+			if (e->next->pid != plugin_sched_get_pid(cSS->data[i]->field)) {
 				/*
 				 * This is the last trailing event. Change the
 				 * "pid" to be equal to the "next pid" of the
 				 * sched_switch event and leave a sign that you
 				 * edited this entry.
 				 */
-				last->pid = data[index]->pid;
-				last->visible &= ~KS_PLUGIN_UNTOUCHED_MASK;
+				e->pid = cSS->data[i]->entry->pid;
+				e->visible &= ~KS_PLUGIN_UNTOUCHED_MASK;
 				break;
 			}
 		}
@@ -256,60 +96,50 @@ static void secondPass(kshark_entry **data,
  */
 void plugin_draw(kshark_cpp_argv *argv_c, int sd, int pid, int draw_action)
 {
-	kshark_entry_collection *col, **collections_ptr;
-	kshark_hash_id *second_pass_hash;
-	kshark_context *kshark_ctx(NULL);
+	plugin_sched_context *plugin_ctx = get_sched_context(sd);
 
 	if (!(draw_action & KsPlot::KSHARK_TASK_DRAW) || pid == 0)
 		return;
 
-	second_pass_hash = get_second_pass_hash(sd);
-	collections_ptr = get_collections_ptr(sd);
-	if (!kshark_instance(&kshark_ctx) ||
-	    !second_pass_hash)
+	plugin_ctx = get_sched_context(sd);
+	if (!plugin_ctx)
 		return;
 
 	KsCppArgV *argvCpp = KS_ARGV_TO_CPP(argv_c);
 
-	/*
-	 * Try to find a collections for this task. It is OK if
-	 * coll = NULL.
-	 */
-	col = kshark_find_data_collection(*collections_ptr, plugin_match_pid,
-					  sd, &pid, 1);
-	if (!col) {
-		/*
-		 * If a data collection for this task does not exist,
-		 * register a new one.
-		 */
-		kshark_entry **data = argvCpp->_histo->data;
-		int size = argvCpp->_histo->data_size;
-
-		col = kshark_add_collection_to_list(kshark_ctx,
-						    collections_ptr,
-						    data, size,
-						    plugin_match_pid,
-						    sd, &pid, 1,
-						    KS_TASK_COLLECTION_MARGIN);
+	if (!plugin_ctx->second_pass_done) {
+		/* The second pass is not done yet. */
+		secondPass(plugin_ctx);
+		plugin_ctx->second_pass_done = true;
 	}
 
-	if (!kshark_hash_id_find(second_pass_hash, pid)) {
-		/* The second pass for this task is not done yet. */
-		secondPass(argvCpp->_histo->data, col, sd, pid);
-		kshark_hash_id_add(second_pass_hash, pid);
-	}
+	IsApplicableFunc checkFieldSW = [=] (kshark_data_container *d,
+					     ssize_t i) {
+		return d->data[i]->field == pid;
+	};
 
-	try {
-		pluginDraw(kshark_ctx,
-			   argvCpp->_histo, col,
-			   SchedEvent::Wakeup, sd, pid,
-			   argvCpp->_graph, argvCpp->_shapes);
+	IsApplicableFunc checkFieldSS = [=] (kshark_data_container *d,
+					     ssize_t i) {
+		return plugin_sched_get_prev_state(d->data[i]->field) != 0x7f &&
+		       plugin_sched_get_pid(d->data[i]->field) == pid;
+	};
 
-		pluginDraw(kshark_ctx,
-			   argvCpp->_histo, col,
-			   SchedEvent::Switch, sd, pid,
-			   argvCpp->_graph, argvCpp->_shapes);
-	} catch (const std::exception &exc) {
-		std::cerr << "Exception in SchedEvents\n" << exc.what();
-	}
+	IsApplicableFunc checkEntryPid = [=] (kshark_data_container *d,
+					      ssize_t i) {
+		return d->data[i]->entry->pid == pid;
+	};
+
+	eventFieldIntervalPlot(argvCpp,
+			       plugin_ctx->sw_data, checkFieldSW,
+			       plugin_ctx->ss_data, checkEntryPid,
+			       makeShape,
+			       {0, 255, 0}, // Green
+			       -1);         // Default size
+
+	eventFieldIntervalPlot(argvCpp,
+			       plugin_ctx->ss_data, checkFieldSS,
+			       plugin_ctx->ss_data, checkEntryPid,
+			       makeShape,
+			       {255, 0, 0}, // Red
+			       -1);         // Default size
 }

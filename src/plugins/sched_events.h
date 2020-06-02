@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: LGPL-2.1 */
 
 /*
- * Copyright (C) 2017 VMware Inc, Yordan Karadzhov <y.karadz@gmail.com>
+ * Copyright (C) 2017 VMware Inc, Yordan Karadzhov (VMware) <y.karadz@gmail.com>
  */
 
 /**
@@ -20,22 +20,46 @@
 extern "C" {
 #endif
 
-struct kshark_hash_id *get_second_pass_hash(int sd);
+/** Structure representing a plugin-specific context. */
+struct plugin_sched_context {
+	/** Page event used to parse the page. */
+	struct tep_handle	*tep;
 
-struct kshark_entry_collection **get_collections_ptr(int sd);
+	/** Pointer to the sched_switch_event object. */
+	struct tep_event	*sched_switch_event;
 
-bool plugin_wakeup_match_rec_pid(struct kshark_context *kshark_ctx,
-				 struct kshark_entry *e, int sd, int *pid);
+	/** Pointer to the sched_switch_next_field format descriptor. */
+	struct tep_format_field	*sched_switch_next_field;
 
-bool plugin_switch_match_rec_pid(struct kshark_context *kshark_ctx,
-				 struct kshark_entry *e, int sd, int *pid);
+	/** Pointer to the sched_switch_comm_field format descriptor. */
+	struct tep_format_field	*sched_switch_comm_field;
 
-bool plugin_switch_match_entry_pid(struct kshark_context *kshark_ctx,
-				   struct kshark_entry *e,
-				   int sd, int *pid);
+	/** Pointer to the sched_switch_prev_state_field format descriptor. */
+	struct tep_format_field	*sched_switch_prev_state_field;
 
-bool plugin_match_pid(struct kshark_context *kshark_ctx,
-		      struct kshark_entry *e, int sd, int *pid);
+	/** Pointer to the sched_waking_event object. */
+	struct tep_event        *sched_waking_event;
+
+	/** Pointer to the sched_waking_pid_field format descriptor. */
+	struct tep_format_field *sched_waking_pid_field;
+
+	/** True if the second pass is already done. */
+	bool	second_pass_done;
+
+	/** . */
+	struct kshark_data_container	*ss_data;
+
+	/** . */
+	struct kshark_data_container	*sw_data;
+};
+
+struct plugin_sched_context *get_sched_context(int sd);
+
+typedef int64_t ks_num_field_t;
+
+int plugin_sched_get_pid(ks_num_field_t field);
+
+int plugin_sched_get_prev_state(ks_num_field_t field);
 
 void plugin_draw(struct kshark_cpp_argv *argv, int sd, int pid,
 		 int draw_action);

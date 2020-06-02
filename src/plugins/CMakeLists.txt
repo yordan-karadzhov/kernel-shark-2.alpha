@@ -40,18 +40,23 @@ endfunction()
 set(PLUGIN_LIST "")
 BUILD_PLUGIN(NAME sched_events
              SOURCE sched_events.c SchedEvents.cpp)
-list(APPEND PLUGIN_LIST "sched_events") # This plugin will be loaded by default
+list(APPEND PLUGIN_LIST "sched_events")
 
 BUILD_PLUGIN(NAME missed_events
              SOURCE missed_events.c MissedEvents.cpp)
-list(APPEND PLUGIN_LIST "missed_events") # This plugin will be loaded by default
+list(APPEND PLUGIN_LIST "missed_events")
 
 BUILD_GUI_PLUGIN(NAME kvm_combo
                  MOC KVMCombo.hpp
                  SOURCE kvm_combo.c KVMCombo.cpp)
-list(APPEND PLUGIN_LIST "kvm_combo") # This plugin is not loaded by default
+list(APPEND PLUGIN_LIST "kvm_combo")
 
-install(TARGETS sched_events missed_events kvm_combo
+BUILD_GUI_PLUGIN(NAME event_field_plot
+                 MOC EventFieldDialog.hpp
+                 SOURCE event_field_plot.c EventFieldDialog.cpp EventFieldPlot.cpp)
+list(APPEND PLUGIN_LIST "event_field_plot")
+
+install(TARGETS sched_events missed_events kvm_combo event_field_plot
         LIBRARY DESTINATION ${KS_PLUGIN_INSTALL_PREFIX})
 
 set(PLUGINS ${PLUGIN_LIST} PARENT_SCOPE)

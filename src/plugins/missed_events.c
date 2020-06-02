@@ -14,13 +14,13 @@
 #include <stdio.h>
 
 // KernelShark
+#include "libkshark.h"
 #include "plugins/missed_events.h"
 
 /** Load this plugin. */
 int KSHARK_PLOT_PLUGIN_INITIALIZER(struct kshark_data_stream *stream)
 {
 	printf("--> missed_events init %i\n", stream->stream_id);
-
 	kshark_register_draw_handler(stream, draw_missed_events);
 
 	return 1;
@@ -30,7 +30,6 @@ int KSHARK_PLOT_PLUGIN_INITIALIZER(struct kshark_data_stream *stream)
 int KSHARK_PLOT_PLUGIN_DEINITIALIZER(struct kshark_data_stream *stream)
 {
 	printf("<-- missed_events close %i\n", stream->stream_id);
-
 	kshark_unregister_draw_handler(stream, draw_missed_events);
 
 	return 1;

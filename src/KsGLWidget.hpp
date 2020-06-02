@@ -17,6 +17,7 @@
 
 // KernelShark
 #include "KsUtils.hpp"
+#include "KsWidgetsLib.hpp"
 #include "KsPlotTools.hpp"
 #include "KsModels.hpp"
 #include "KsDualMarker.hpp"
@@ -54,7 +55,7 @@ struct KsPlotEntry {
 
 KsPlotEntry &operator <<(KsPlotEntry &plot, QVector<int> &v);
 
-void operator >>(KsPlotEntry &plot, QVector<int> &v);
+void operator >>(const KsPlotEntry &plot, QVector<int> &v);
 
 typedef QVector<KsPlotEntry>	KsComboPlot;
 
@@ -75,6 +76,8 @@ public:
 	void resizeGL(int w, int h) override;
 
 	void paintGL() override;
+
+	void render();
 
 	void reset();
 
@@ -198,6 +201,11 @@ public:
 	/** Combo graphs to be plotted. */
 	QVector<KsComboPlot>		_comboPlots;
 
+	void setWipPtr(KsWidgetsLib::KsWorkInProgress *wip)
+	{
+		_workInProgress = wip;
+	}
+
 signals:
 	/**
 	 * This signal is emitted when the mouse moves over a visible
@@ -251,6 +259,8 @@ private:
 	KsPlot::ColorTable	_cpuColors;
 
 	KsPlot::ColorTable	_streamColors;
+
+	KsWidgetsLib::KsWorkInProgress	*_workInProgress;
 
 	int		_labelSize, _hMargin, _vMargin;
 

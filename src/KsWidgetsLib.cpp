@@ -96,26 +96,39 @@ KsWorkInProgress::KsWorkInProgress(QWidget *parent)
 	_icon.setPixmap(statusIcon.pixmap(.8 * FONT_HEIGHT));
 }
 
+
 void KsWorkInProgress::show(KsDataWork w)
 {
-	if (_works.isEmpty()) {
+	_works.insert(w);
+	if (_works.size() == 1) {
 		_icon.show();
 		_message.show();
-		QApplication::processEvents();
-	}
 
-	_works.insert(w);
+		if (w != KsDataWork::RenderGL &&
+		    w != KsDataWork::ResizeGL)
+			QApplication::processEvents();
+	}
 }
 
 void KsWorkInProgress::hide(KsDataWork w)
 {
 	_works.remove(w);
-
 	if (_works.isEmpty()) {
 		_icon.hide();
 		_message.hide();
-		QApplication::processEvents();
+
+		if (w != KsDataWork::RenderGL &&
+		    w != KsDataWork::ResizeGL)
+			QApplication::processEvents();
 	}
+}
+
+bool KsWorkInProgress::isBusy(KsDataWork w) const
+{
+	if (w == KsDataWork::AnyWork)
+		return _works.isEmpty()? false : true;
+
+	return _works.contains(w)? true : false;
 }
 
 void KsWorkInProgress::addToStatusBar(QStatusBar *sb)
@@ -250,16 +263,15 @@ KsTimeOffsetDialog::KsTimeOffsetDialog(QWidget *parent)
 KsCheckBoxWidget::KsCheckBoxWidget(int sd, const QString &name,
 				   QWidget *parent)
 : QWidget(parent),
-  _tb(this),
   _sd(sd),
-  _allCb("all", &_tb),
+  _allCb("all"),
   _cbWidget(this),
   _cbLayout(&_cbWidget),
   _topLayout(this),
   _allCbAction(nullptr),
   _stramLabel("", this),
   _name(name),
-  _nameLabel(name + ":  ", &_tb)
+  _nameLabel(name + ":  ")
 {
 	setWindowTitle(_name);
 	_setStream(sd);

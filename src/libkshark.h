@@ -65,7 +65,7 @@ struct kshark_entry {
 	 * dependent. The time usually is the timestamp from when the system
 	 * started.
 	 */
-	uint64_t	ts;
+	int64_t		ts;
 };
 
 /**
@@ -103,10 +103,36 @@ typedef int (*stream_find_id_func) (struct kshark_data_stream *,
 /** A function type to be used by the method interface of the data stream. */
 typedef int *(*stream_get_ids_func) (struct kshark_data_stream *);
 
+typedef int (*stream_get_names_func) (struct kshark_data_stream *,
+				      const struct kshark_entry *,
+				      char ***);
+
+/** Event field format identifier. */
+typedef enum kshark_event_field_format {
+	/** A field of unknown type. */
+	KS_INVALIDE_FIELD,
+
+	/** Integer number */
+	KS_INTEGER_FIELD,
+
+	/** Floating-point number */
+	KS_FLOAT_FIELD
+} kshark_event_field_format;
+
+typedef kshark_event_field_format
+(*stream_event_field_type) (struct kshark_data_stream *,
+			    const struct kshark_entry *,
+			    const char *);
+
 typedef const int (*stream_read_event_field) (struct kshark_data_stream *,
 					      const struct kshark_entry *,
 					      const char *,
-					      unsigned long long *);
+					      int64_t *);
+
+typedef const int (*stream_read_record_field) (struct kshark_data_stream *,
+					       void *,
+					       const char *,
+					       int64_t *);
 
 struct kshark_context;
 
@@ -125,7 +151,7 @@ typedef ssize_t (*load_matrix_func) (struct kshark_data_stream *,
 				     uint64_t **ts_array);
 
 /** Data format identifier. */
-enum kshark_data_format {
+typedef enum kshark_data_format {
 	/** A data of unknown type. */
 	KS_INVALIDE_DATA,
 
@@ -134,7 +160,7 @@ enum kshark_data_format {
 
 	/** VMware SchedTrace data. */
 	KS_VMW_ST_DATA,
-};
+} kshark_data_format;
 
 /**
  * Structure representing the interface of methods used to operate over
@@ -162,14 +188,26 @@ struct kshark_data_stream_interface {
 	/** Method used to retrieve Id of the Event from its name. */
 	stream_find_id_func	find_event_id;
 
-	/** Method used to retrieve the arrays of Ids of all Events. */
+	/** Method used to retrieve the array of Ids of all Events. */
 	stream_get_ids_func	get_all_event_ids;
 
 	/** Method used to dump the entry's content to string. */
 	stream_get_str_func	dump_entry;
 
+	/**
+	 * Method used to retrieve the array of all field names of a given
+	 * event.
+	 */
+	stream_get_names_func	get_all_field_names;
+
+	/** Method used to access the type of an event's data field. */
+	stream_event_field_type		get_event_field_type;
+
 	/** Method used to access the value of an event's data field. */
-	stream_read_event_field	read_event_field;
+	stream_read_event_field		read_event_field_int64;
+
+	/** Method used to access the value of an event's data field. */
+	stream_read_record_field	read_record_field_int64;
 
 	/** Method used to load the data in the form of entries. */
 	load_entries_func	load_entries;
@@ -355,7 +393,7 @@ static inline int kshark_get_event_id(const struct kshark_entry *entry)
 
 	return stream->interface.get_event_id(stream, entry);
 }
-#include <stdio.h>
+
 static inline int *kshark_get_all_event_ids(struct kshark_data_stream *stream)
 {
 	return stream->interface.get_all_event_ids(stream);
@@ -406,8 +444,7 @@ static inline char *kshark_get_info(const struct kshark_entry *entry)
 }
 
 static inline int kshark_read_event_field(const struct kshark_entry *entry,
-					  const char* field,
-					  unsigned long long *val)
+					  const char* field, int64_t *val)
 {
 	struct kshark_data_stream *stream =
 		kshark_get_stream_from_entry(entry);
@@ -415,7 +452,8 @@ static inline int kshark_read_event_field(const struct kshark_entry *entry,
 	if (!stream)
 		return -1;
 
-	return stream->interface.read_event_field(stream, entry, field, val);
+	return stream->interface.read_event_field_int64(stream, entry,
+							field, val);
 }
 
 static inline char *kshark_dump_entry(const struct kshark_entry *entry)
@@ -572,6 +610,12 @@ void kshark_clear_all_filters(struct kshark_context *kshark_ctx,
 			      struct kshark_entry **data,
 			      size_t n_entries);
 
+void kshark_calib_entry(struct kshark_data_stream *stream,
+			struct kshark_entry *entry);
+
+void kshark_plugin_actions(struct kshark_data_stream *stream,
+			   void *record, struct kshark_entry *entry);
+
 void kshark_postprocess_entry(struct kshark_data_stream *stream,
 			      void *record, struct kshark_entry *entry);
 
@@ -596,7 +640,7 @@ enum kshark_search_failed {
 		}					\
 	}
 
-ssize_t kshark_find_entry_by_time(uint64_t time,
+ssize_t kshark_find_entry_by_time(int64_t time,
 				  struct kshark_entry **data_rows,
 				  size_t l, size_t h);
 
@@ -610,6 +654,10 @@ bool kshark_match_event_id(struct kshark_context *kshark_ctx,
 			   struct kshark_entry *e, int sd, int *event_id);
 
 bool kshark_match_event_and_pid(struct kshark_context *kshark_ctx,
+				struct kshark_entry *e,
+				int sd, int *values);
+
+bool kshark_match_event_and_cpu(struct kshark_context *kshark_ctx,
 				struct kshark_entry *e,
 				int sd, int *values);
 
@@ -1074,6 +1122,35 @@ bool data_matrix_alloc(size_t n_rows, int16_t **cpu_array,
 				      int32_t **event_array,
 				      int64_t **offset_array,
 				      uint64_t **ts_array);
+
+struct kshark_data_field_int64 {
+	struct kshark_entry	*entry;
+
+	int64_t			field;
+};
+
+struct kshark_data_container {
+	struct kshark_data_field_int64	**data;
+
+	ssize_t		size;
+
+	ssize_t		capacity;
+
+	bool		sorted;
+};
+
+struct kshark_data_container *kshark_init_data_container();
+
+void kshark_free_data_container(struct kshark_data_container *container);
+
+ssize_t kshark_data_container_append(struct kshark_data_container *container,
+				     struct kshark_entry *entry, int64_t field);
+
+void kshark_data_container_sort(struct kshark_data_container *container);
+
+ssize_t kshark_find_entry_field_by_time(int64_t time,
+					struct kshark_data_field_int64 **data,
+					size_t l, size_t h);
 
 #ifdef __cplusplus
 }

@@ -28,7 +28,7 @@ KsPlotEntry &operator <<(KsPlotEntry &plot, QVector<int> &v)
 	return plot;
 }
 
-void operator >>(KsPlotEntry &plot, QVector<int> &v)
+void operator >>(const KsPlotEntry &plot, QVector<int> &v)
 {
 	v.append(plot._streamId);
 	v.append(plot._type);
@@ -122,8 +122,7 @@ void KsGLWidget::paintGL()
 	if (isEmpty())
 		return;
 
-	/* Process and draw all graphs by using the built-in logic. */
-	_makeGraphs();
+	render();
 
 	/* Draw the time axis. */
 	_drawAxisX(size);
@@ -132,13 +131,13 @@ void KsGLWidget::paintGL()
 		for (auto const &g: stream)
 			g->draw(size);
 
-	/* Process and draw all plugin-specific shapes. */
-	_makePluginShapes();
 	while (!_shapes.empty()) {
 		auto s = _shapes.front();
 		_shapes.pop_front();
 
-		s->_size = size;
+		if (s->_size < 0)
+			s->_size = size + abs(s->_size + 1);
+
 		s->draw();
 
 		delete s;
@@ -152,6 +151,15 @@ void KsGLWidget::paintGL()
 	_mState->passiveMarker().draw();
 	_mState->activeMarker().draw();
 }
+
+void KsGLWidget::render()
+{
+	/* Process and draw all graphs by using the built-in logic. */
+	_makeGraphs();
+
+	/* Process and draw all plugin-specific shapes. */
+	_makePluginShapes();
+};
 
 /** Reset (empty) the widget. */
 void KsGLWidget::reset()
@@ -428,9 +436,6 @@ void KsGLWidget::loadData(KsDataStore *data)
 	tMax = _data->rows()[_data->size() - 1]->ts;
 	ksmodel_set_bining(_model.histo(), nBins, tMin, tMax);
 	_model.fill(_data->rows(), _data->size());
-
-	if (_data->size() && nBins > 0)
-		_makeGraphs();
 }
 
 /**

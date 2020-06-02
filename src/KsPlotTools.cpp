@@ -16,7 +16,6 @@
 // C++
 #include <algorithm>
 #include <vector>
-#include <iostream>
 
 // OpenGL
 #include <GL/freeglut.h>
@@ -182,7 +181,7 @@ ColorTable getCPUColorTable()
 	free(streamIds);
 
 	for (int i = 0; i < nCPUMax; ++i)
-		colors[i].setRainbowColor(i);
+		colors[i].setRainbowColor(i + 8);
 
 	return colors;
 }
@@ -768,6 +767,7 @@ Graph::Graph()
   _ensembleColors(nullptr),
   _label(),
   _idleSuppress(false),
+  _idlePid(0),
   _drawBase(true)
 {}
 
@@ -790,6 +790,7 @@ Graph::Graph(kshark_trace_histo *histo, KsPlot::ColorTable *bct, KsPlot::ColorTa
   _ensembleColors(ect),
   _label(),
   _idleSuppress(false),
+  _idlePid(-1),
   _drawBase(true)
 {
 	if (!_bins) {
@@ -1126,7 +1127,6 @@ void Graph::fillTaskGraph(int sd, int pid)
 	int cpuFront, cpuBack(0), pidFront(0), pidBack(0), lastCpu(-1), bin(0);
 	uint8_t visMask;
 	ssize_t index;
-
 	auto lamSetBin = [&] (int bin)
 	{
 		if (cpuFront >= 0) {
@@ -1346,7 +1346,10 @@ void Graph::draw(float size)
 			}
 
 	auto lamCheckEnsblVal = [this] (int v) {
-		return v > 0 || (v == _idlePid && !this->_idleSuppress);
+		if (_idleSuppress && v == _idlePid)
+			return false;
+
+		return v >= 0;
 	};
 
 	/*

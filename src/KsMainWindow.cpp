@@ -102,6 +102,7 @@ KsMainWindow::KsMainWindow(QWidget *parent)
 	_workInProgress.addToStatusBar(sb);
 
 	_graph.setWipPtr(&_workInProgress);
+	_graph.glPtr()->setWipPtr(&_workInProgress);
 	_view.setWipPtr(&_workInProgress);
 
 	connect(&_splitter,	&QSplitter::splitterMoved,
@@ -185,6 +186,7 @@ KsMainWindow::~KsMainWindow()
 	}
 
 	_data.clear();
+	_plugins.deletePluginDialogs();
 
 	/*
 	 * Do not show error messages if the "capture" process is still
@@ -459,13 +461,13 @@ void KsMainWindow::_createMenus()
 
 	/* Tools menu */
 	tools = menuBar()->addMenu("Tools");
-	tools->addAction(&_managePluginsAction);
-	tools->addAction(&_addPluginsAction);
-	tools->addAction(&_captureAction);
-	tools->addAction(&_addOffcetAction);
-	tools->addSeparator();
 	tools->addAction(&_colorAction);
 	tools->addAction(&_fullScreenModeAction);
+	tools->addSeparator();
+	tools->addAction(&_captureAction);
+	tools->addAction(&_managePluginsAction);
+	tools->addAction(&_addPluginsAction);
+	tools->addAction(&_addOffcetAction);
 
 	/*
 	 * Enable the "Add Time Offset" menu only in the case of multiple
@@ -1126,13 +1128,13 @@ void KsMainWindow::_pluginAdd()
 			dialog->exec();
 		}
 
-		_graph.startOfWork(KsDataWork::UpdatePligins);
+		_graph.startOfWork(KsDataWork::UpdatePlugins);
 
 		_plugins.addPlugins(fileNames, streams);
 		if (_data.size())
 			_data.reload();
 
-		_graph.endOfWork(KsDataWork::UpdatePligins);
+		_graph.endOfWork(KsDataWork::UpdatePlugins);
 	}
 }
 
@@ -1407,7 +1409,7 @@ void KsMainWindow::loadSession(const QString &fileName)
 
 	std::thread job = std::thread(lamLoadJob, &_data);
 
-	for (int i = 0; i < 170; ++i) {
+	for (int i = 0; i < 150; ++i) {
 		/*
 		 * TODO: The way this progress bar gets updated here is a pure
 		 * cheat. See if this can be implemented better.
@@ -1416,12 +1418,14 @@ void KsMainWindow::loadSession(const QString &fileName)
 			break;
 
 		pb.setValue(i);
-		usleep(200000);
+		usleep(300000);
 	}
 
 	job.join();
 
 	_view.loadData(&_data);
+	pb.setValue(155);
+
 	_graph.loadData(&_data);
 	_filterSyncCBoxUpdate(kshark_ctx);
 	pb.setValue(175);

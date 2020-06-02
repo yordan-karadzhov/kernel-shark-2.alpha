@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LGPL-2.1
 
 /*
- * Copyright (C) 2018 VMware Inc, Yordan Karadzhov <y.karadz@gmail.com>
+ * Copyright (C) 2018 VMware Inc, Yordan Karadzhov (VMware) <y.karadz@gmail.com>
  */
 
 /**
@@ -24,76 +24,48 @@
 #include "plugins/sched_events.h"
 #include "libkshark-tepdata.h"
 
-/** Structure representing a plugin-specific context. */
-struct plugin_sched_context {
-	/** Page event used to parse the page. */
-	struct tep_handle	*tep;
-
-	/** Pointer to the sched_switch_event object. */
-	struct tep_event	*sched_switch_event;
-
-	/** Pointer to the sched_switch_next_field format descriptor. */
-	struct tep_format_field	*sched_switch_next_field;
-
-	/** Pointer to the sched_switch_comm_field format descriptor. */
-	struct tep_format_field	*sched_switch_comm_field;
-
-	/** Pointer to the sched_switch_prev_state_field format descriptor. */
-	struct tep_format_field	*sched_switch_prev_state_field;
-
-	/** Pointer to the sched_wakeup_event object. */
-	struct tep_event	*sched_wakeup_event;
-
-	/** Pointer to the sched_wakeup_pid_field format descriptor. */
-	struct tep_format_field	*sched_wakeup_pid_field;
-
-	/** Pointer to the sched_wakeup_new_event object. */
-	struct tep_event	*sched_wakeup_new_event;
-
-	/** Pointer to the sched_wakeup_new_pid_field format descriptor. */
-	struct tep_format_field	*sched_wakeup_new_pid_field;
-
-	/** Pointer to the sched_waking_event object. */
-	struct tep_event        *sched_waking_event;
-
-	/** Pointer to the sched_waking_pid_field format descriptor. */
-	struct tep_format_field *sched_waking_pid_field;
-
-	/** List of Data collections used by this plugin. */
-	struct kshark_entry_collection	*collections;
-
-	/** Hash of the tasks for which the second pass is already done. */
-	struct kshark_hash_id		*second_pass_hash;
-};
-
 /** Plugin context instance. */
 static struct plugin_sched_context *
 plugin_sched_context_handler[KS_MAX_NUM_STREAMS] = {NULL};
 
 /** Get the per Data stream context of the plugin. */
-static struct plugin_sched_context *get_sched_context(int sd)
+struct plugin_sched_context *get_sched_context(int sd)
 {
 	return plugin_sched_context_handler[sd];
 }
 
-/** Get the Hash of the tasks for which the second pass is already done. */
-struct kshark_hash_id *get_second_pass_hash(int sd)
-{
-	struct plugin_sched_context *plugin_ctx = get_sched_context(sd);
-	if (!plugin_ctx)
-		return NULL;
+typedef unsigned long long tep_num_field_t;
 
-	return plugin_ctx->second_pass_hash;
+#define PREV_STATE_SHIFT	((int) ((sizeof(ks_num_field_t) - 1) * 8))
+
+#define PREV_STATE_MASK	(((ks_num_field_t) 1 << 8) - 1)
+
+#define PID_MASK		(((ks_num_field_t) 1 << PREV_STATE_SHIFT) - 1)
+
+static void plugin_sched_set_pid(ks_num_field_t *field,
+			  tep_num_field_t pid)
+{
+	*field &= ~PID_MASK;
+	*field = pid & PID_MASK;
 }
 
-/** Get the list of per Data stream collections of the plugin. */
-struct kshark_entry_collection **get_collections_ptr(int sd)
+int plugin_sched_get_pid(ks_num_field_t field)
 {
-	struct plugin_sched_context *plugin_ctx = get_sched_context(sd);
-	if (!plugin_ctx)
-		return NULL;
+	return field & PID_MASK;
+}
 
-	return &plugin_ctx->collections;
+static void plugin_sched_set_prev_state(ks_num_field_t *field,
+				 tep_num_field_t ps)
+{
+	tep_num_field_t mask = PREV_STATE_MASK << PREV_STATE_SHIFT;
+	*field &= ~mask;
+	*field |= (ps & PREV_STATE_MASK) << PREV_STATE_SHIFT;
+}
+
+int plugin_sched_get_prev_state(ks_num_field_t field)
+{
+	tep_num_field_t mask = PREV_STATE_MASK << PREV_STATE_SHIFT;
+	return (field & mask) >> PREV_STATE_SHIFT;
 }
 
 static bool
@@ -113,44 +85,46 @@ define_wakeup_event(struct tep_handle *tep, const char *wakeup_name,
 	return true;
 }
 
-static void plugin_free_context(struct plugin_sched_context *plugin_ctx)
+static void plugin_sched_free_context(int sd)
 {
+	struct plugin_sched_context *plugin_ctx = get_sched_context(sd);
 	if (!plugin_ctx)
 		return;
 
-	kshark_hash_id_free(plugin_ctx->second_pass_hash);
-	kshark_free_collection_list(plugin_ctx->collections);
+	kshark_free_data_container(plugin_ctx->ss_data );
+	kshark_free_data_container(plugin_ctx->sw_data );
 
 	free(plugin_ctx);
+	plugin_sched_context_handler[sd] = NULL;
 }
 
-static bool plugin_sched_init_context(struct kshark_data_stream *stream)
+static struct plugin_sched_context *
+plugin_sched_init_context(struct kshark_data_stream *stream)
 {
 	struct plugin_sched_context *plugin_ctx;
+	int sd = stream->stream_id;
 	struct tep_event *event;
 	bool wakeup_found;
 
 	if (stream->format != KS_TEP_DATA)
-		return false;
+		return NULL;
 
 	/* No context should exist when we initialize the plugin. */
-	assert(plugin_sched_context_handler[stream->stream_id] == NULL);
+	assert(plugin_sched_context_handler[sd] == NULL);
 
-	plugin_ctx = calloc(1, sizeof(*plugin_ctx));
+	plugin_sched_context_handler[sd] = plugin_ctx =
+		calloc(1, sizeof(*plugin_ctx));
 	if (!plugin_ctx) {
 		fprintf(stderr,
 			"Failed to allocate memory for plugin_sched_context.\n");
-		return false;
+		return NULL;
 	}
 
-	plugin_ctx->collections = NULL;
 	plugin_ctx->tep = kshark_get_tep(stream);
 	event = tep_find_event_by_name(plugin_ctx->tep,
 				       "sched", "sched_switch");
-	if (!event) {
-		plugin_free_context(plugin_ctx);
-		return false;
-	}
+	if (!event)
+		goto fail;
 
 	plugin_ctx->sched_switch_event = event;
 	plugin_ctx->sched_switch_next_field =
@@ -163,271 +137,126 @@ static bool plugin_sched_init_context(struct kshark_data_stream *stream)
 		tep_find_field(event, "prev_state");
 
 	wakeup_found = define_wakeup_event(plugin_ctx->tep, "sched_wakeup",
-					   &plugin_ctx->sched_wakeup_event,
-					   &plugin_ctx->sched_wakeup_pid_field);
+					   &plugin_ctx->sched_waking_event,
+					   &plugin_ctx->sched_waking_pid_field);
 
 	wakeup_found |= define_wakeup_event(plugin_ctx->tep, "sched_wakeup_new",
-					    &plugin_ctx->sched_wakeup_new_event,
-					    &plugin_ctx->sched_wakeup_new_pid_field);
+					    &plugin_ctx->sched_waking_event,
+					    &plugin_ctx->sched_waking_pid_field);
 
 	wakeup_found |= define_wakeup_event(plugin_ctx->tep, "sched_waking",
 					    &plugin_ctx->sched_waking_event,
 					    &plugin_ctx->sched_waking_pid_field);
 
-	plugin_ctx->second_pass_hash = kshark_hash_id_alloc(KS_TASK_HASH_NBITS);
-	plugin_sched_context_handler[stream->stream_id] = plugin_ctx;
+	plugin_ctx->second_pass_done = false;
 
-	return true;
+	plugin_ctx->ss_data = kshark_init_data_container();
+	plugin_ctx->sw_data = kshark_init_data_container();
+	if (!plugin_ctx->ss_data ||
+	    !plugin_ctx->sw_data)
+		goto fail;
+
+	return plugin_ctx;
+
+ fail:
+	plugin_sched_free_context(sd);
+	return NULL;
 }
 
-static int plugin_get_next_pid(struct tep_record *record, int sd)
+static void plugin_sched_swith_action(struct kshark_data_stream *stream,
+				      void *rec, struct kshark_entry *entry)
 {
-	struct plugin_sched_context *plugin_ctx =
-		plugin_sched_context_handler[sd];
-	unsigned long long val;
+	struct tep_record *record = (struct tep_record *) rec;
+	struct plugin_sched_context *plugin_ctx;
+	unsigned long long next_pid, prev_state;
+	ks_num_field_t ks_field;
 	int ret;
+
+	plugin_ctx = get_sched_context(stream->stream_id);
+	if (!plugin_ctx)
+		return;
 
 	ret = tep_read_number_field(plugin_ctx->sched_switch_next_field,
-				    record->data, &val);
+				    record->data, &next_pid);
 
-	return ret ? : val;
-}
+	if (ret == 0 && next_pid >= 0) {
+		plugin_sched_set_pid(&ks_field, entry->pid);
 
-static int find_wakeup_pid(struct kshark_context *kshark_ctx,
-			   struct kshark_entry *e,
-			   int sd,
-			   struct tep_event *wakeup_event,
-			   struct tep_format_field *pid_field)
-{
-	struct kshark_data_stream *stream;
-	struct tep_record *record;
-	unsigned long long val;
-	int ret;
-
-	stream = kshark_get_data_stream(kshark_ctx, sd);
-	if (!stream || !wakeup_event || e->event_id != wakeup_event->id)
-		return -1;
-
-	record = tracecmd_read_at(kshark_get_tep_input(stream),
-				  e->offset, NULL);
-
-	ret = tep_read_number_field(pid_field, record->data, &val);
-	free_record(record);
-
-	if (ret)
-		return -1;
-
-	return val;
-}
-
-static bool wakeup_match_rec_pid(struct plugin_sched_context *plugin_ctx,
-				 struct kshark_context *kshark_ctx,
-				 struct kshark_entry *e,
-				 int sd, int pid)
-{
-	struct tep_event *wakeup_events[] = {
-		plugin_ctx->sched_waking_event,
-		plugin_ctx->sched_wakeup_event,
-		plugin_ctx->sched_wakeup_new_event,
-	};
-	struct tep_format_field *wakeup_fields[] = {
-		plugin_ctx->sched_waking_pid_field,
-		plugin_ctx->sched_wakeup_pid_field,
-		plugin_ctx->sched_wakeup_new_pid_field,
-	};
-	int i, wakeup_pid = -1;
-
-	for (i = 0; i < sizeof(wakeup_events) / sizeof(wakeup_events[0]); i++) {
-		wakeup_pid = find_wakeup_pid(kshark_ctx, e, sd,
-					     wakeup_events[i], wakeup_fields[i]);
-		if (wakeup_pid >= 0)
-			break;
-	}
-
-	if (wakeup_pid >= 0 && wakeup_pid == pid)
-		return true;
-
-	return false;
-}
-
-/**
- * @brief Process Id matching function adapted for sched_wakeup and
- *	  sched_wakeup_new events.
- *
- * @param kshark_ctx: Input location for the session context pointer.
- * @param e: kshark_entry to be checked.
- * @param sd: Data stream identifier.
- * @param pid: Matching condition value.
- *
- * @returns True if the Pid of the record matches the value of "pid".
- *	    Otherwise false.
- */
-bool plugin_wakeup_match_rec_pid(struct kshark_context *kshark_ctx,
-				 struct kshark_entry *e,
-				 int sd, int *pid)
-{
-	struct plugin_sched_context *plugin_ctx;
-
-	plugin_ctx = plugin_sched_context_handler[sd];
-
-	if (e->stream_id != sd)
-		return false;
-
-	return wakeup_match_rec_pid(plugin_ctx, kshark_ctx, e, sd, *pid);
-}
-
-/**
- * @brief Process Id matching function adapted for sched_switch events.
- *
- * @param kshark_ctx: Input location for the session context pointer.
- * @param e: kshark_entry to be checked.
- * @param sd: Data stream identifier.
- * @param pid: Matching condition value.
- *
- * @returns True if the Pid of the record matches the value of "pid".
- *	    Otherwise false.
- */
-bool plugin_switch_match_rec_pid(struct kshark_context *kshark_ctx,
-				 struct kshark_entry *e,
-				 int sd, int *pid)
-{
-	struct plugin_sched_context *plugin_ctx;
-	unsigned long long val;
-	int ret, switch_pid = -1;
-
-	plugin_ctx = plugin_sched_context_handler[sd];
-
-	if (plugin_ctx->sched_switch_event &&
-	    e->stream_id == sd &&
-	    e->event_id == plugin_ctx->sched_switch_event->id) {
-		struct kshark_data_stream *stream = kshark_ctx->stream[sd];
-		struct tep_record *record;
-
-		record = tracecmd_read_at(kshark_get_tep_input(stream),
-					  e->offset, NULL);
 		ret = tep_read_number_field(plugin_ctx->sched_switch_prev_state_field,
-					    record->data, &val);
+					    record->data, &prev_state);
 
-		if (ret == 0 && !(val & 0x7f))
-			switch_pid = tep_data_pid(plugin_ctx->tep, record);
+		if (ret == 0)
+			plugin_sched_set_prev_state(&ks_field, prev_state);
 
-		free_record(record);
-	}
-
-	if (switch_pid >= 0 && switch_pid == *pid)
-		return true;
-
-	return false;
-}
-
-/**
- * @brief Process Id matching function adapted for sched_switch events.
- *
- * @param kshark_ctx: Input location for the session context pointer.
- * @param e: kshark_entry to be checked.
- * @param sd: Data stream identifier.
- * @param pid: Matching condition value.
- *
- * @returns True if the Pid of the entry matches the value of "pid".
- *	    Otherwise false.
- */
-bool plugin_switch_match_entry_pid(struct kshark_context *kshark_ctx,
-				   struct kshark_entry *e,
-				   int sd, int *pid)
-{
-	struct plugin_sched_context *plugin_ctx;
-
-	plugin_ctx = plugin_sched_context_handler[sd];
-
-	if (plugin_ctx->sched_switch_event &&
-	    e->event_id == plugin_ctx->sched_switch_event->id &&
-	    e->stream_id == sd &&
-	    e->pid == *pid)
-		return true;
-
-	return false;
-}
-
-/**
- * @brief A match function to be used to process a data collections for
- *	  the Sched events plugin.
- *
- * @param kshark_ctx: Input location for the session context pointer.
- * @param e: kshark_entry to be checked.
- * @param sd: Data stream identifier.
- * @param pid: Matching condition value.
- *
- * @returns True if the entry is relevant for the Sched events plugin.
- *	    Otherwise false.
- */
-bool plugin_match_pid(struct kshark_context *kshark_ctx,
-		      struct kshark_entry *e, int sd, int *pid)
-{
-	return plugin_switch_match_entry_pid(kshark_ctx, e, sd, pid) ||
-	       plugin_switch_match_rec_pid(kshark_ctx, e, sd, pid) ||
-	       plugin_wakeup_match_rec_pid(kshark_ctx, e, sd, pid);
-}
-
-static void plugin_sched_action(struct kshark_data_stream *stream, void *rec,
-				struct kshark_entry *entry)
-{
-	int next_pid = plugin_get_next_pid(rec, entry->stream_id);
-	if (next_pid >= 0) {
+		kshark_data_container_append(plugin_ctx->ss_data, entry, ks_field);
 		entry->pid = next_pid;
 	}
 }
 
-static int plugin_sched_init(struct kshark_data_stream *stream)
+static void plugin_sched_wakeup_action(struct kshark_data_stream *stream,
+				       void *rec, struct kshark_entry *entry)
 {
+	struct tep_record *record = (struct tep_record *) rec;
 	struct plugin_sched_context *plugin_ctx;
+	unsigned long long val;
+	int ret;
 
-	if (!plugin_sched_init_context(stream))
-		return 0;
-
-	plugin_ctx = plugin_sched_context_handler[stream->stream_id];
-
-	kshark_register_event_handler(stream,
-				      plugin_ctx->sched_switch_event->id,
-				      plugin_sched_action);
-
-	kshark_register_draw_handler(stream, plugin_draw);
-
-	return 1;
-}
-
-static int plugin_sched_close(struct kshark_data_stream *stream)
-{
-	struct plugin_sched_context *plugin_ctx;
-
-	plugin_ctx = plugin_sched_context_handler[stream->stream_id];
+	plugin_ctx = get_sched_context(stream->stream_id);
 	if (!plugin_ctx)
-		return 0;
+		return;
 
-	kshark_unregister_event_handler(stream,
-					plugin_ctx->sched_switch_event->id,
-					plugin_sched_action);
+	ret = tep_read_number_field(plugin_ctx->sched_waking_pid_field,
+				    record->data, &val);
 
-	kshark_unregister_draw_handler(stream, plugin_draw);
-
-	kshark_hash_id_free(plugin_ctx->second_pass_hash);
-
-	kshark_free_collection_list(plugin_ctx->collections);
-	free(plugin_sched_context_handler[stream->stream_id]);
-	plugin_sched_context_handler[stream->stream_id] = NULL;
-
-	return 1;
+	if (ret == 0)
+		kshark_data_container_append(plugin_ctx->sw_data, entry, val);
 }
 
 /** Load this plugin. */
 int KSHARK_PLOT_PLUGIN_INITIALIZER(struct kshark_data_stream *stream)
 {
 	printf("--> sched init %i\n", stream->stream_id);
-	return plugin_sched_init(stream);
+	struct plugin_sched_context *plugin_ctx;
+
+	plugin_ctx = plugin_sched_init_context(stream);
+	if (!plugin_ctx)
+		return 0;
+
+	kshark_register_event_handler(stream,
+				      plugin_ctx->sched_switch_event->id,
+				      plugin_sched_swith_action);
+
+	kshark_register_event_handler(stream,
+				      plugin_ctx->sched_waking_event->id,
+				      plugin_sched_wakeup_action);
+
+	kshark_register_draw_handler(stream, plugin_draw);
+
+	return 1;
 }
 
 /** Unload this plugin. */
 int KSHARK_PLOT_PLUGIN_DEINITIALIZER(struct kshark_data_stream *stream)
 {
 	printf("<-- sched close %i\n", stream->stream_id);
-	return plugin_sched_close(stream);
+	struct plugin_sched_context *plugin_ctx;
+	int sd = stream->stream_id;
+
+	plugin_ctx = get_sched_context(sd);
+	if (!plugin_ctx)
+		return 0;
+
+	kshark_unregister_event_handler(stream,
+					plugin_ctx->sched_switch_event->id,
+					plugin_sched_swith_action);
+
+	kshark_unregister_event_handler(stream,
+					plugin_ctx->sched_waking_event->id,
+					plugin_sched_wakeup_action);
+
+	kshark_unregister_draw_handler(stream, plugin_draw);
+
+	plugin_sched_free_context(sd);
+
+	return 1;
 }

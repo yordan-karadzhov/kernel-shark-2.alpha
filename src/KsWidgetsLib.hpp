@@ -57,6 +57,7 @@ public:
 
 enum class KsDataWork
 {
+	AnyWork,
 	EditPlotList,
 	ZoomIn,
 	QuickZoomIn,
@@ -66,7 +67,9 @@ enum class KsDataWork
 	ScrollRight,
 	JumpTo,
 	GraphUpdateGeom,
-	UpdatePligins,
+	UpdatePlugins,
+	ResizeGL,
+	RenderGL,
 };
 
 inline uint qHash(KsDataWork key, uint seed)
@@ -82,6 +85,8 @@ public:
 	void show(KsDataWork w);
 
 	void hide(KsDataWork w);
+
+	bool isBusy(KsDataWork w = KsDataWork::AnyWork) const;
 
 	void addToStatusBar(QStatusBar *sb);
 
@@ -117,6 +122,11 @@ public:
 	{
 		if (_workInProgress)
 			_workInProgress->hide(w);
+	}
+
+	bool isBusy(KsDataWork w = KsDataWork::AnyWork) const
+	{
+		return _workInProgress? _workInProgress->isBusy(w) : false;
 	}
 
 private:

@@ -252,8 +252,12 @@ kshark_register_plugin(struct kshark_context *kshark_ctx,
 	}
 
 	plugin->handle = dlopen(file, RTLD_NOW | RTLD_GLOBAL);
-	if (!plugin->handle)
+	if (!plugin->handle) {
+		fprintf(stderr,
+			"failed to open plugin file.\n%s\n",
+			dlerror());
 		goto fail;
+	}
 
 	plugin->file = strdup(file);
 	plugin->name = strdup(name);
@@ -344,7 +348,7 @@ kshark_register_plugin(struct kshark_context *kshark_ctx,
 /** Close and free this plugin. */
 static void free_plugin(struct kshark_plugin_list *plugin)
 {
-	dlclose(plugin->handle);
+// 	dlclose(plugin->handle);
 
 	if (plugin->process_interface){
 		free(plugin->process_interface->name);
@@ -560,6 +564,7 @@ void kshark_unregister_plugin_from_stream(struct kshark_data_stream *stream,
 
 			this_plugin = *last;
 			*last = this_plugin->next;
+			this_plugin->interface->close(stream);
 			free(this_plugin);
 
 			stream->n_plugins--;

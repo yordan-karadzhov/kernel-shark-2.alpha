@@ -36,8 +36,12 @@ class KsComboPlotDialog : public QDialog
 	Q_OBJECT
 public:
 	explicit KsComboPlotDialog(QWidget *parent = nullptr);
+
 	~KsComboPlotDialog();
+
 	void update();
+
+	KsMainWindow	*_gui_ptr;
 
 signals:
 	/** Signal emitted when the "Apply" button is pressed. */
@@ -45,7 +49,8 @@ signals:
 
 private:
 	int				_guestMapCount;
-	struct kshark_host_guest_map 	*_guestMap;
+
+	struct kshark_host_guest_map	*_guestMap;
 
 	KsVCPUCheckBoxWidget		_vcpuTree;
 
@@ -62,6 +67,14 @@ private:
 	QPushButton			_applyButton, _cancelButton;
 
 	QMetaObject::Connection		_applyButtonConnection;
+
+	QMap<int, QVector<KsComboPlot>>	_plotMap;
+
+	int	_currentGuestStream;
+
+	QVector<KsComboPlot> _streamCombos(int sd);
+
+	void _setCurrentPlots(int guestSd);
 
 	void _applyPress();
 

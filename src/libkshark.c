@@ -701,6 +701,11 @@ void kshark_apply_filters(struct kshark_context *kshark_ctx,
 		entry->visible &= ~kshark_ctx->filter_mask;
 }
 
+static void set_all_visible(uint8_t *v) {
+	/*  Keep the original value of the PLUGIN_UNTOUCHED bit flag. */
+	*v |= 0xFF & ~KS_PLUGIN_UNTOUCHED_MASK;
+}
+
 static void filter_entries(struct kshark_context *kshark_ctx, int sd,
 			   struct kshark_entry **data, size_t n_entries)
 {
@@ -743,7 +748,7 @@ static void filter_entries(struct kshark_context *kshark_ctx, int sd,
 		}
 
 		/* Start with and entry which is visible everywhere. */
-		data[i]->visible = 0xFF;
+		set_all_visible(&data[i]->visible);
 
 		/* Apply Id filtering. */
 		kshark_apply_filters(kshark_ctx, stream, data[i]);
@@ -812,27 +817,34 @@ void kshark_clear_all_filters(struct kshark_context *kshark_ctx,
 	int i;
 
 	for (i = 0; i < n_entries; ++i)
-		data[i]->visible = 0xFF;
+		set_all_visible(&data[i]->visible);
 }
 
 /**
- * @brief Post-process the content of the entry. This includes time calibration
- *	  and all registered event-specific plugin actions.
+ * @brief Time calibration of the timestamp of the entry.
  *
- * @param kshark_ctx: Input location for the session context pointer. If NULL,
- *		      no plugin actions are applied.
  * @param stream: Input location for a Trace data stream pointer.
- * @param record: Input location for the trace record.
  * @param entry: Output location for entry.
  */
-void kshark_postprocess_entry(struct kshark_data_stream *stream,
-			      void *record, struct kshark_entry *entry)
+void kshark_calib_entry(struct kshark_data_stream *stream,
+			struct kshark_entry *entry)
 {
 	if (stream->calib && stream->calib_array) {
 		/* Calibrate the timestamp of the entry. */
 		stream->calib(entry, stream->calib_array);
 	}
+}
 
+/**
+ * @brief Process all registered event-specific plugin actions.
+ *
+ * @param stream: Input location for a Trace data stream pointer.
+ * @param record: Input location for the trace record.
+ * @param entry: Output location for entry.
+ */
+void kshark_plugin_actions(struct kshark_data_stream *stream,
+			   void *record, struct kshark_entry *entry)
+{
 	if (stream->event_handlers) {
 		/* Execute all plugin-provided actions for this event (if any). */
 		struct kshark_event_proc_handler *evt_handler = stream->event_handlers;
@@ -844,6 +856,22 @@ void kshark_postprocess_entry(struct kshark_data_stream *stream,
 			entry->visible &= ~KS_PLUGIN_UNTOUCHED_MASK;
 		}
 	}
+}
+
+/**
+ * @brief Post-process the content of the entry. This includes time calibration
+ *	  and all registered event-specific plugin actions.
+ *
+ * @param stream: Input location for a Trace data stream pointer.
+ * @param record: Input location for the trace record.
+ * @param entry: Output location for entry.
+ */
+void kshark_postprocess_entry(struct kshark_data_stream *stream,
+			      void *record, struct kshark_entry *entry)
+{
+	kshark_calib_entry(stream, entry);
+
+	kshark_plugin_actions(stream, record, entry);
 }
 
 /**
@@ -861,7 +889,7 @@ void kshark_postprocess_entry(struct kshark_data_stream *stream,
  *	    If all entries inside the range have timestamps smaller than "time"
  *	    the function returns BSEARCH_ALL_SMALLER (negative value).
  */
-ssize_t kshark_find_entry_by_time(uint64_t time,
+ssize_t kshark_find_entry_by_time(int64_t time,
 				  struct kshark_entry **data,
 				  size_t l, size_t h)
 {
@@ -940,7 +968,7 @@ bool kshark_match_event_id(struct kshark_context *kshark_ctx,
 }
 
 /**
- * @brief Simple event Id and PID matching function to be user for data requests.
+ * @brief Simple Event Id and PID matching function to be user for data requests.
  *
  * @param kshark_ctx: Input location for the session context pointer.
  * @param e: kshark_entry to be checked.
@@ -956,8 +984,29 @@ bool kshark_match_event_and_pid(struct kshark_context *kshark_ctx,
 				int sd, int *values)
 {
 	return e->stream_id == sd &&
-	       e->pid == values[1] &&
-	       e->event_id == values[0];
+	       e->event_id == values[0] &&
+	       e->pid == values[1];
+}
+
+/**
+ * @brief Simple Event Id and CPU matching function to be user for data requests.
+ *
+ * @param kshark_ctx: Input location for the session context pointer.
+ * @param e: kshark_entry to be checked.
+ * @param sd: Data stream identifier.
+ * @param values: An array of matching condition value.
+ *	  values[0] is the matches PID and values[1] is the matches event Id.
+ *
+ * @returns True if the event Id of the entry matches the values.
+ *	    Else false.
+ */
+bool kshark_match_event_and_cpu(struct kshark_context *kshark_ctx,
+				struct kshark_entry *e,
+				int sd, int *values)
+{
+	return e->stream_id == sd &&
+	       e->event_id == values[0] &&
+	       e->cpu == values[1];
 }
 
 /**
@@ -1389,4 +1438,131 @@ bool data_matrix_alloc(size_t n_rows, int16_t **cpu_array,
 
 	fprintf(stderr, "Failed to allocate memory during data loading.\n");
 	return false;
+}
+
+#define KS_CONTAINER_DEFAULT_SIZE	1024
+
+struct kshark_data_container *kshark_init_data_container()
+{
+	struct kshark_data_container *container;
+
+	container = calloc(1, sizeof(*container));
+	if (!container)
+		goto fail;
+
+	container->data = calloc(KS_CONTAINER_DEFAULT_SIZE,
+				  sizeof(*container->data));
+
+	if (!container->data)
+		goto fail;
+
+	container->capacity = KS_CONTAINER_DEFAULT_SIZE;
+	container->sorted = false;
+
+	return container;
+
+ fail:
+	fprintf(stderr, "Failed to allocate memory for data container.\n");
+	kshark_free_data_container(container);
+	return NULL;
+}
+
+void kshark_free_data_container(struct kshark_data_container *container)
+{
+	free(container->data);
+	free(container);
+}
+
+ssize_t kshark_data_container_append(struct kshark_data_container *container,
+				     struct kshark_entry *entry, int64_t field)
+{
+	if (container->capacity == container->size) {
+		struct kshark_data_field_int64	**data_tmp;
+
+		data_tmp = realloc(container->data,
+				   2 * container->capacity * sizeof(*container->data));
+		if (!data_tmp)
+			return -ENOMEM;
+
+		container->data = data_tmp;
+		container->capacity *= 2;
+	}
+
+	container->data[container->size] = malloc(sizeof(container->data));
+	container->data[container->size]->entry = entry;
+	container->data[container->size++]->field = field;
+
+	return container->size;
+}
+
+static int compare_time_dc(const void* a, const void* b)
+{
+	const struct kshark_data_field_int64 *field_a, *field_b;
+
+	field_a = *(const struct kshark_data_field_int64 **) a;
+	field_b = *(const struct kshark_data_field_int64 **) b;
+
+	if (field_a->entry->ts > field_b->entry->ts)
+		return 1;
+
+	if (field_a->entry->ts < field_b->entry->ts)
+		return -1;
+
+	return 0;
+}
+
+void kshark_data_container_sort(struct kshark_data_container *container)
+{
+	struct kshark_data_field_int64	**data_tmp;
+
+	qsort(container->data, container->size,
+	      sizeof(struct kshark_data_field_int64 *),
+	      compare_time_dc);
+
+	container->sorted = true;
+
+	data_tmp = realloc(container->data,
+			   container->size * sizeof(*container->data));
+
+	if (!data_tmp)
+		return;
+
+	container->data = data_tmp;
+	container->capacity = container->size;
+}
+
+/**
+ * @brief Binary search inside a time-sorted array of kshark_data_field_int64.
+ *
+ * @param time: The value of time to search for.
+ * @param data: Input location for the data.
+ * @param l: Array index specifying the lower edge of the range to search in.
+ * @param h: Array index specifying the upper edge of the range to search in.
+ *
+ * @returns On success, the index of the first kshark_data_field_int64 inside
+ *	    the range, having a timestamp equal or bigger than "time".
+ *	    If all fields inside the range have timestamps greater than "time"
+ *	    the function returns BSEARCH_ALL_GREATER (negative value).
+ *	    If all fields inside the range have timestamps smaller than "time"
+ *	    the function returns BSEARCH_ALL_SMALLER (negative value).
+ */
+ssize_t kshark_find_entry_field_by_time(int64_t time,
+					struct kshark_data_field_int64 **data,
+					size_t l, size_t h)
+{
+	size_t mid;
+
+	if (data[l]->entry->ts > time)
+		return BSEARCH_ALL_GREATER;
+
+	if (data[h]->entry->ts < time)
+		return BSEARCH_ALL_SMALLER;
+
+	/*
+	 * After executing the BSEARCH macro, "l" will be the index of the last
+	 * entry having timestamp < time and "h" will be the index of the first
+	 * entry having timestamp >= time.
+	 */
+	BSEARCH(h, l, data[mid]->entry->ts < time);
+	return h;
 }

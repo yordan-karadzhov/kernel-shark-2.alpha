@@ -62,6 +62,8 @@ static void drawVirt(kshark_trace_histo *histo,
 
 		bridge->_color = hostGraph->getBin(bin)._color;
 		bridge->_visible = true;
+		bridge->_size = -1; // Default size
+
 		shapes->push_front(bridge);
 		bridge = nullptr;
 	};
@@ -84,6 +86,8 @@ static void drawVirt(kshark_trace_histo *histo,
 				      guestBaseY);
 
 		gap->_visible = true;
+		gap->_size = -1; // Default size
+
 		shapes->push_front(gap);
 		gap = nullptr;
 	};
@@ -134,6 +138,7 @@ static void drawVirt(kshark_trace_histo *histo,
 
 		bridge->setExitHost(hostGraph->getBin(histo->n_bins - 1)._base.x(),
 				    guestBaseY);
+		bridge->_size = -1; // Default size
 
 		shapes->push_front(bridge);
 	}

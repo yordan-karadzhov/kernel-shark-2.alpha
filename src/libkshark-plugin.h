@@ -162,7 +162,7 @@ typedef int (*kshark_plugin_load_func)(struct kshark_data_stream *);
 
 typedef int (*kshark_check_data_func)(const char *filename);
 
-typedef void (*kshark_plugin_ctrl_func)(void *);
+typedef void *(*kshark_plugin_ctrl_func)(void *);
 
 
 /** Plugable Data Readout Interface (dpi). */

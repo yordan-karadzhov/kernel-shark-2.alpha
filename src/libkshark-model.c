@@ -289,14 +289,26 @@ static void ksmodel_set_next_bin_edge(struct kshark_trace_histo *histo,
 	row = kshark_find_entry_by_time(time_min, histo->data, last_row,
 					histo->data_size - 1);
 
-	if (row < 0 || histo->data[row]->ts >= time_max) {
-		/* The bin is empty. */
-		histo->map[next_bin] = KS_EMPTY_BIN;
-		return;
+	if (row == BSEARCH_ALL_GREATER) {
+		if (histo->data[last_row]->ts < time_max) {
+			histo->map[next_bin] = last_row;
+			return;
+		} else {
+			goto empty;
+		}
 	}
+
+	if (row == BSEARCH_ALL_SMALLER || histo->data[row]->ts >= time_max)
+		goto empty;
 
 	/* Set the index of the first entry. */
 	histo->map[next_bin] = row;
+	return;
+
+ empty:
+	/* The bin is empty. */
+	histo->map[next_bin] = KS_EMPTY_BIN;
+	return;
 }
 
 /*
@@ -1330,4 +1342,16 @@ ksmodel_get_task_missed_events(struct kshark_trace_histo *histo,
 	return ksmodel_get_entry_front(histo, bin, true,
 				       match_pid_missed_events, sd, &pid,
 				       col, index);
+}
+
+int ksmodel_get_bin(struct kshark_trace_histo *histo,
+		    const struct kshark_entry *entry)
+{
+	if (entry->ts < histo->min)
+		return UPPER_OVERFLOW_BIN;
+
+	if (entry->ts > histo->max)
+		return LOWER_OVERFLOW_BIN;
+
+	return  (entry->ts - histo->min) / histo->bin_size;
 }

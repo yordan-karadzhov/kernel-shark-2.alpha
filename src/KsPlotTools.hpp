@@ -13,7 +13,7 @@
 #define _KS_PLOT_TOOLS_H
 
 // C++
-#include <forward_list>
+#include <list>
 #include <unordered_map>
 
 // KernelShark
@@ -144,7 +144,7 @@ private:
 };
 
 /** List of graphical element. */
-typedef std::forward_list<PlotObject*> PlotObjList;
+typedef std::list<PlotObject*> PlotObjList;
 
 class Point;
 
@@ -475,7 +475,7 @@ public:
 	void drawVal(float size = 2.);
 
 	/** Get the height (module) of the line, representing the Bin. */
-	int mod() {return _val.y() - _base.y();}
+	int mod() const {return _val.y() - _base.y();}
 
 	/** @brief Set the vertical coordinate of the "val" Point. */
 	void setVal(int v) {_val.setY(_base.y() - v); }

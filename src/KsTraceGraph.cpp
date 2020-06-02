@@ -223,6 +223,7 @@ void KsTraceGraph::_quickZoomIn()
 		 */
 		uint64_t ts = _mState->activeMarker()._ts;
 		_glWindow.model()->jumpTo(ts);
+		_glWindow.render();
 	}
 
 	endOfWork(KsDataWork::QuickZoomIn);
@@ -235,6 +236,7 @@ void KsTraceGraph::_quickZoomOut()
 
 	startOfWork(KsDataWork::QuickZoomOut);
 	_glWindow.model()->quickZoomOut();
+	_glWindow.render();
 	endOfWork(KsDataWork::QuickZoomOut);
 }
 
@@ -434,7 +436,7 @@ void KsTraceGraph::taskReDraw(int sd, QVector<int> v)
  * @brief Redreaw all virtCombo graphs.
  *
  * @param sd: Data stream identifier.
- * @param v: Process ids of the tasks to be plotted.
+ * @param v: Descriptor of the Combo to be plotted.
  */
 void KsTraceGraph::comboReDraw(int nCombos, QVector<int> v)
 {
@@ -615,6 +617,15 @@ void KsTraceGraph::resizeEvent(QResizeEvent* event)
  */
 bool KsTraceGraph::eventFilter(QObject* obj, QEvent* evt)
 {
+	/* Desable all mouse events for the OpenGL wiget when busi. */
+	if (obj == &_glWindow && this->isBusy() &&
+	    (evt->type() == QEvent::MouseButtonDblClick ||
+	     evt->type() == QEvent::MouseButtonPress ||
+	     evt->type() == QEvent::MouseButtonRelease ||
+	     evt->type() == QEvent::MouseMove)
+	)
+		return true;
+
 	if (obj == &_glWindow && evt->type() == QEvent::Enter)
 		_glWindow.setFocus();
 
@@ -702,6 +713,7 @@ void KsTraceGraph::_updateGraphs(KsDataWork action)
 			k  *= 1.02;
 
 		_mState->updateMarkers(*_data, &_glWindow);
+		_glWindow.render();
 		QCoreApplication::processEvents();
 	}
 }

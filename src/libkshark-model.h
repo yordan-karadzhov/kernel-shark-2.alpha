@@ -163,17 +163,20 @@ ksmodel_get_task_missed_events(struct kshark_trace_histo *histo,
 			       struct kshark_entry_collection *col,
 			       ssize_t *index);
 
-static inline double ksmodel_bin_time(struct kshark_trace_histo *histo,
-				      int bin)
-{
-	return (histo->min + bin*histo->bin_size) * 1e-9;
-}
-
 static inline uint64_t ksmodel_bin_ts(struct kshark_trace_histo *histo,
 				      int bin)
 {
-	return (histo->min + bin*histo->bin_size);
+	return (histo->min + bin * histo->bin_size);
 }
+
+static inline double ksmodel_bin_time(struct kshark_trace_histo *histo,
+				      int bin)
+{
+	return ksmodel_bin_ts(histo, bin) * 1e-9;
+}
+
+int ksmodel_get_bin(struct kshark_trace_histo *histo,
+		    const struct kshark_entry *entry);
 
 #ifdef __cplusplus
 }

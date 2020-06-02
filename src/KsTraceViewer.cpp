@@ -9,7 +9,7 @@
  *  @brief   KernelShark Trace Viewer widget.
  */
 
-// C++11
+// C++
 #include <thread>
 #include <future>
 #include <queue>

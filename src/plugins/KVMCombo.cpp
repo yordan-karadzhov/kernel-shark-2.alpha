@@ -10,7 +10,7 @@
  */
 
 // C++
-#include<iostream>
+#include <iostream>
 
 // trace-cmd
 #include "trace-cmd/trace-cmd.h"
@@ -24,6 +24,52 @@
 #include "KVMCombo.hpp"
 
 using namespace KsWidgetsLib;
+
+static KsComboPlotDialog *combo_dialog(nullptr);
+static QMetaObject::Connection combo_dialogConnection;
+
+#define DIALOG_NAME	"KVM Combo plots"
+
+static void showDialog(KsMainWindow *ks)
+{
+	kshark_context *kshark_ctx(nullptr);
+
+	if (!kshark_instance(&kshark_ctx))
+		return;
+
+	if (kshark_ctx->n_streams < 2) {
+		QString err("Data from one Host and at least one Guest is required.");
+		QMessageBox msgBox;
+		msgBox.critical(nullptr, "Error", err);
+
+		return;
+	}
+
+	combo_dialog->update();
+
+	if (!combo_dialogConnection) {
+		combo_dialogConnection =
+			QObject::connect(combo_dialog,	&KsComboPlotDialog::apply,
+					 ks->graphPtr(),&KsTraceGraph::comboReDraw);
+	}
+
+	combo_dialog->show();
+}
+
+void *plugin_kvm_add_menu(void *ks_ptr)
+{
+	KsMainWindow *ks = static_cast<KsMainWindow *>(ks_ptr);
+	QString menu("Plots/");
+	menu += DIALOG_NAME;
+	ks->addPluginMenu(menu, showDialog);
+
+	if (!combo_dialog)
+		combo_dialog = new KsComboPlotDialog();
+
+	combo_dialog->_gui_ptr = ks;
+
+	return combo_dialog;
+}
 
 /**
  * @brief Plugin's draw function.
@@ -67,14 +113,15 @@ KsVCPUCheckBoxWidget::KsVCPUCheckBoxWidget(QWidget *parent)
 	_initTree();
 }
 
-void KsVCPUCheckBoxWidget::update(int GuestId,
+void KsVCPUCheckBoxWidget::update(int guestId,
 				  kshark_host_guest_map *gMap, int gMapCount)
 {
-	KsPlot::ColorTable colors;
+	KsPlot::ColorTable colTable;
+	QColor color;
 	int j;
 
 	for (j = 0; j < gMapCount; j++)
-		if (gMap[j].guest_id == GuestId)
+		if (gMap[j].guest_id == guestId)
 			break;
 	if (j == gMapCount)
 		return;
@@ -82,7 +129,7 @@ void KsVCPUCheckBoxWidget::update(int GuestId,
 	_tree.clear();
 	_id.resize(gMap[j].vcpu_count);
 	_cb.resize(gMap[j].vcpu_count);
-	colors = KsPlot::getCPUColorTable();
+	colTable = KsPlot::getCPUColorTable();
 
 	for (int i = 0; i < gMap[j].vcpu_count; ++i) {
 		QString strCPU = QLatin1String("vCPU ") + QString::number(i);
@@ -92,9 +139,8 @@ void KsVCPUCheckBoxWidget::update(int GuestId,
 		cpuItem->setText(0, "  ");
 		cpuItem->setText(1, strCPU);
 		cpuItem->setCheckState(0, Qt::Checked);
-		cpuItem->setBackgroundColor(0, QColor(colors[i].r(),
-						      colors[i].g(),
-						      colors[i].b()));
+		color << colTable[i];
+		cpuItem->setBackgroundColor(0, color);
 		_tree.addTopLevelItem(cpuItem);
 		_id[i] = i;
 		_cb[i] = cpuItem;
@@ -104,19 +150,19 @@ void KsVCPUCheckBoxWidget::update(int GuestId,
 	setDefault(false);
 }
 
-#define DIALOG_NAME	"KVM Combo plots"
-
 #define LABEL_WIDTH	(FONT_WIDTH * 50)
 
 /** Create default KsComboPlotDialog. */
 KsComboPlotDialog::KsComboPlotDialog(QWidget *parent)
-: _vcpuTree(this),
+: QDialog(parent),
+  _vcpuTree(this),
   _hostLabel("Host:", this),
   _hostFileLabel("", this),
   _guestLabel("Guest:", this),
   _guestStreamComboBox(this),
   _applyButton("Apply", this),
-  _cancelButton("Cancel", this)
+  _cancelButton("Cancel", this),
+  _currentGuestStream(0)
 {
 	kshark_context *kshark_ctx(nullptr);
 	int buttonWidth;
@@ -189,9 +235,9 @@ KsComboPlotDialog::~KsComboPlotDialog()
 void KsComboPlotDialog::update()
 {
 	kshark_context *kshark_ctx(nullptr);
-	int ret;
-	int sd;
-	int i;
+	KsPlot::ColorTable colTable;
+	QColor color;
+	int ret, sd, i;
 
 	if (!kshark_instance(&kshark_ctx))
 		return;
@@ -208,13 +254,16 @@ void KsComboPlotDialog::update()
 			       Qt::ElideLeft, LABEL_WIDTH);
 
 	_guestStreamComboBox.clear();
+	colTable = KsPlot::getStreamColorTable();
 	for (i = 0; i < _guestMapCount; i++) {
 		sd = _guestMap[i].guest_id;
 		if (sd >= kshark_ctx->n_streams)
 			continue;
 
-		_guestStreamComboBox.addItem(kshark_ctx->stream[sd]->file,
-					     sd);
+		_guestStreamComboBox.addItem(kshark_ctx->stream[sd]->file, sd);
+		color << colTable[sd];
+		_guestStreamComboBox.setItemData(i, QBrush(color),
+						    Qt::BackgroundRole);
 	}
 
 	if (!_applyButtonConnection) {
@@ -225,95 +274,85 @@ void KsComboPlotDialog::update()
 
 	sd = _guestStreamComboBox.currentData().toInt();
 	_vcpuTree.update(sd, _guestMap, _guestMapCount);
+	_setCurrentPlots(sd);
 }
 
-void KsComboPlotDialog::_applyPress()
+QVector<KsComboPlot> KsComboPlotDialog::_streamCombos(int guestId)
 {
 	QVector<int> cbVec = _vcpuTree.getCheckedIds();
-	QVector<int> allCombosVec;
+	QVector <KsComboPlot> plots;
 	KsComboPlot combo(2);
-	int nPlots(0);
-	int GuestId;
 	int j;
 
-	GuestId = _guestStreamComboBox.currentData().toInt();
 	for (j = 0; j < _guestMapCount; j++)
-		if (_guestMap[j].guest_id == GuestId)
+		if (_guestMap[j].guest_id == guestId)
 			break;
+
 	if (j == _guestMapCount)
-		return;
-
-
-	/*
-	 * Disconnect _applyButton. This is done in order to protect
-	 * against multiple clicks.
-	 */
-	disconnect(_applyButtonConnection);
+		return {};
 
 	for (auto const &i: cbVec) {
 		if (i >= _guestMap[j].vcpu_count)
 			continue;
-
-		allCombosVec.append(2);
 
 		combo[0]._streamId = _guestMap[j].guest_id;
 		combo[0]._id = i;
 		combo[0]._type = KsPlot::KSHARK_CPU_DRAW |
 				 KsPlot::KSHARK_GUEST_DRAW;
 
-		combo[0] >> allCombosVec;
-
 		combo[1]._streamId = _guestMap[j].host_id;
 		combo[1]._id = _guestMap[j].cpu_pid[i];
 		combo[1]._type = KsPlot::KSHARK_TASK_DRAW |
 				 KsPlot::KSHARK_HOST_DRAW;
 
-		combo[1] >> allCombosVec;
-		++nPlots;
+		plots.append(combo);
 	}
+
+	return plots;
+}
+
+void KsComboPlotDialog::_applyPress()
+{
+	QVector<int> allCombosVec;
+	int nPlots(0);
+	int guestId;
+
+	guestId = _guestStreamComboBox.currentData().toInt();
+	_plotMap[guestId] = _streamCombos(guestId);
+
+	for (auto const &stream: _plotMap)
+		for (auto const &combo: stream) {
+			allCombosVec.append(2);
+			combo[0] >> allCombosVec;
+			combo[1] >> allCombosVec;
+			++nPlots;
+		}
 
 	emit apply(nPlots, allCombosVec);
 }
 
+void KsComboPlotDialog::_setCurrentPlots(int guestSd)
+{
+	QVector<KsComboPlot> currentCombos =_plotMap[guestSd];
+	QVector<int> vcpuCBs(_guestMapCount, 0);
+
+	for(auto const &p: currentCombos) {
+		int vcpu = p[0]._id;
+		vcpuCBs[vcpu] = 1;
+	}
+
+	_vcpuTree.set(vcpuCBs);
+}
+
 void KsComboPlotDialog::_guestStreamChanged(const QString &sdStr)
 {
-	int GuestId = _guestStreamComboBox.currentData().toInt();
-	_vcpuTree.update(GuestId, _guestMap, _guestMapCount);
-}
+	int newGuestId = _guestStreamComboBox.currentData().toInt();
+	QVector<int> vcpuCBs(_guestMapCount, 0);
 
-KsComboPlotDialog dialog;
-QMetaObject::Connection dialogConnection;
+	_plotMap[_currentGuestStream] = _streamCombos(_currentGuestStream);
 
-static void showDialog(KsMainWindow *ks)
-{
-	kshark_context *kshark_ctx(nullptr);
+	_vcpuTree.update(newGuestId, _guestMap, _guestMapCount);
+	_setCurrentPlots(newGuestId);
 
-	if (!kshark_instance(&kshark_ctx))
-		return;
-
-	if (kshark_ctx->n_streams < 2) {
-		QString err("Data from one Host and at least one Guest is required.");
-		QMessageBox msgBox;
-		msgBox.critical(nullptr, "Error", err);
-
-		return;
-	}
-
-	dialog.update();
-
-	if (!dialogConnection) {
-		dialogConnection =
-			QObject::connect(&dialog,	&KsComboPlotDialog::apply,
-					 ks->graphPtr(),&KsTraceGraph::comboReDraw);
-	}
-
-	dialog.show();
-}
-
-void plugin_kvm_add_menu(void *ks_ptr)
-{
-	KsMainWindow *ks = static_cast<KsMainWindow *>(ks_ptr);
-	QString menu("Plots/");
-	menu += DIALOG_NAME;
-	ks->addPluginMenu(menu, showDialog);
+	_currentGuestStream = newGuestId;
 }

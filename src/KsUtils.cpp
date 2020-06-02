@@ -85,6 +85,24 @@ QVector<int> getEventIdList(int sd)
 	return allEvts;
 }
 
+QVector<int> getStreamIdList()
+{
+	kshark_context *kshark_ctx(nullptr);
+	QVector<int> v;
+	int *ids;
+
+	if (!kshark_instance(&kshark_ctx))
+		return {};
+
+	ids = kshark_all_streams(kshark_ctx);
+	v.resize(kshark_ctx->n_streams);
+	for (int i = 0; i < kshark_ctx->n_streams; ++i)
+		v[i] = ids[i];
+
+	free(ids);
+	return v;
+}
+
 /** @brief Get a sorted vector of Id values of a filter. */
 QVector<int> getFilterIds(kshark_hash_id *filter)
 {
@@ -991,8 +1009,14 @@ void KsPluginManager::registerPluginMenues()
 		return;
 
 	for (plugin = kshark_ctx->plugins; plugin; plugin = plugin->next)
-		if (plugin->handle && plugin->ctrl_interface)
-			plugin->ctrl_interface(parent());
+		if (plugin->handle && plugin->ctrl_interface) {
+			void *dialogPtr = plugin->ctrl_interface(parent());
+			if (dialogPtr) {
+				QWidget *dialog =
+					static_cast<QWidget *>(dialogPtr);
+				_pluginDialogs.append(dialog);
+			}
+		}
 }
 
 std::string KsPluginManager::_pluginLibFromName(const QString &plugin)
@@ -1033,6 +1057,51 @@ std::string KsPluginManager::_pluginNameFromLib(const QString &plugin)
 void KsPluginManager::registerPlugins(const QString &pluginNames)
 {
 	_userPlugins.append(_loadPluginList(pluginNames.split(' ')));
+}
+
+void KsPluginManager::_pluginToStream(const QString &pluginName,
+				      QVector<int> streamId,
+				      bool reg)
+{
+	kshark_context *kshark_ctx(nullptr);
+	kshark_plugin_list *plugin;
+	kshark_data_stream *stream;
+
+	if (!kshark_instance(&kshark_ctx))
+		return;
+
+	plugin = kshark_find_plugin_by_name(kshark_ctx->plugins,
+					    pluginName.toStdString().c_str());
+
+	if (!plugin || !plugin->process_interface)
+		return;
+
+	for (auto const &sd: streamId) {
+		stream = kshark_get_data_stream(kshark_ctx, sd);
+		if (reg)
+			kshark_register_plugin_to_stream(stream,
+							 plugin->process_interface,
+							 true);
+		else
+			kshark_unregister_plugin_from_stream(stream,
+							     plugin->process_interface);
+
+		kshark_handle_all_dpis(stream, KSHARK_PLUGIN_UPDATE);
+	}
+
+	emit dataReload();
+}
+
+void KsPluginManager::registerPluginToStream(const QString &pluginName,
+					     QVector<int> streamId)
+{
+	_pluginToStream(pluginName, streamId, true);
+}
+
+void KsPluginManager::unregisterPluginFromStream(const QString &pluginName,
+						 QVector<int> streamId)
+{
+	_pluginToStream(pluginName, streamId, false);
 }
 
 /**
@@ -1145,4 +1214,14 @@ void KsPluginManager::updatePlugins(int sd, QVector<int> pluginStates)
 	}
 
 	kshark_handle_all_dpis(stream, KSHARK_PLUGIN_UPDATE);
+}
+
+/**
+ * @brief Destroy all Plugin dialogs.
+ */
+void KsPluginManager::deletePluginDialogs()
+{
+	/** Delete all register plugin dialogs. */
+	for (auto &pd: _pluginDialogs)
+		delete pd;
 }

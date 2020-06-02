@@ -14,7 +14,6 @@
 #define _KS_PLUGIN_M_EVTS_H
 
 // KernelShark
-#include "libkshark.h"
 #include "libkshark-plugin.h"
 
 #ifdef __cplusplus

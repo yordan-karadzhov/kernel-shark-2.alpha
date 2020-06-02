@@ -39,10 +39,6 @@ int kshark_tep_filter_remove_event(struct kshark_data_stream *stream,
 
 void kshark_tep_filter_reset(struct kshark_data_stream *stream);
 
-int kshark_tep_get_event_fields(struct kshark_data_stream *stream,
-				int event_id,
-				char ***fields);
-
 char **kshark_tracecmd_local_plugins();
 
 struct tep_handle;

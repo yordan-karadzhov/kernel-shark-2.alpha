@@ -12,6 +12,9 @@
 #ifndef _KS_UTILS_H
 #define _KS_UTILS_H
 
+// C
+#include <unistd.h>
+
 // C++ 11
 #include <chrono>
 
@@ -88,6 +91,8 @@ QVector<int> getCPUList(int sd);
 QVector<int> getPidList(int sd);
 
 QVector<int> getEventIdList(int sd);
+
+QVector<int> getStreamIdList();
 
 QVector<int> getFilterIds(kshark_hash_id *filter);
 
@@ -269,6 +274,14 @@ public:
 
 	void unregisterPlugins(const QString &pluginNames);
 
+	void registerPluginToStream(const QString &pluginName,
+				    QVector<int> streamId);
+
+	void unregisterPluginFromStream(const QString &pluginName,
+					QVector<int> streamId);
+
+	void deletePluginDialogs();
+
 signals:
 	/** This signal is emitted when a plugin is loaded or unloaded. */
 	void dataReload();
@@ -276,12 +289,19 @@ signals:
 private:
 	QVector<kshark_plugin_list *>	_userPlugins;
 
+	/** Plugin dialogs. */
+	QVector<QWidget *>		_pluginDialogs;
+
 	QVector<kshark_plugin_list *>
 	_loadPluginList(const QStringList &plugins);
 
 	std::string _pluginLibFromName(const QString &plugin);
 
 	std::string _pluginNameFromLib(const QString &plugin);
+
+	void _pluginToStream(const QString &pluginName,
+			     QVector<int> streamId,
+			     bool reg);
 };
 
 KsPlot::Color& operator <<(KsPlot::Color &thisColor, const QColor &c);

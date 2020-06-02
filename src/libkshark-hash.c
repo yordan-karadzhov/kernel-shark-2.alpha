@@ -3,7 +3,6 @@
 /*
  * Copyright (C) 2009, Steven Rostedt <srostedt@redhat.com>
  * Copyright (C) 2018 VMware Inc, Steven Rostedt <rostedt@goodmis.org>
- *
  */
 
 /**

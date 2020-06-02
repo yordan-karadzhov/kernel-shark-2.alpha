@@ -65,6 +65,16 @@ public:
 		_plugins.unregisterPlugins(plugin);
 	}
 
+	void registerPluginToStream(const QString &plugin, QVector<int> streamId)
+	{
+		_plugins.registerPluginToStream(plugin, streamId);
+	}
+
+	void unregisterPluginFromStream(const QString &plugin, QVector<int> streamId)
+	{
+		_plugins.unregisterPluginFromStream(plugin, streamId);
+	}
+
 	void resizeEvent(QResizeEvent* event);
 
 	/** Set the Full Screen mode. */
@@ -76,6 +86,8 @@ public:
 	void addPluginMenu(QString place, pluginActionFunc action);
 
 	KsTraceGraph *graphPtr() {return &_graph;}
+
+	KsWidgetsLib::KsWorkInProgress *getWipPtr() {return &_workInProgress;}
 
 private:
 	QSplitter	_splitter;

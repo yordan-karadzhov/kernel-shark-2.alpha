@@ -174,8 +174,8 @@ struct rec_list {
 	};
 };
 
-static int plugin_get_next_pid(struct kshark_data_stream *stream,
-			       struct tep_record *record)
+static int get_next_pid(struct kshark_data_stream *stream,
+			struct tep_record *record)
 {
 	unsigned long long val;
 	int ret;
@@ -186,9 +186,9 @@ static int plugin_get_next_pid(struct kshark_data_stream *stream,
 	return ret ? : val;
 }
 
-static void plugin_register_command(struct kshark_data_stream *stream,
-				    struct tep_record *record,
-				    int pid)
+static void register_command(struct kshark_data_stream *stream,
+			     struct tep_record *record,
+			     int pid)
 {
 	struct tep_format_field *comm_field = get_sched_comm(stream);
 	const char *comm = record->data + comm_field->offset;
@@ -292,10 +292,9 @@ static ssize_t get_records(struct kshark_context *kshark_ctx,
 				set_entry_values(stream, rec, entry);
 
 				if(entry->event_id == get_sched_switch_id(stream)) {
-					next_pid = plugin_get_next_pid(stream, rec);
+					next_pid = get_next_pid(stream, rec);
 					if (next_pid >= 0)
-						plugin_register_command(stream, rec,
-									next_pid);
+						register_command(stream, rec, next_pid);
 				}
 
 				entry->stream_id = stream->stream_id;
@@ -816,6 +815,38 @@ static int *tepdata_get_event_ids(struct kshark_data_stream *stream)
 	return evt_ids;
 }
 
+static int tepdata_get_field_names(struct kshark_data_stream *stream,
+				   const struct kshark_entry *entry,
+				   char ***fields_str)
+{
+	struct tep_format_field *field, **fields;
+	struct tep_event *event;
+	int i= 0, nr_fields;
+	char **buffer;
+
+	*fields_str = NULL;
+	event = tep_find_event(kshark_get_tep(stream), entry->event_id);
+	if (!event)
+		return 0;
+
+	nr_fields = event->format.nr_fields;
+	buffer = calloc(nr_fields, sizeof(**fields_str));
+
+	fields = tep_event_fields(event);
+	for (field = *fields; field; field = field->next)
+		if (asprintf(&buffer[i++], "%s", field->name) <= 0)
+			goto fail;
+
+	*fields_str = buffer;
+	return nr_fields;
+
+ fail:
+	for (i = 0; i < nr_fields; ++i)
+		free(buffer[i]);
+
+	return -EFAULT;
+}
+
 /**
  * Custom entry info function type. To be user for dumping info for custom
  * KernelShark entryes.
@@ -935,32 +966,89 @@ static const int tepdata_find_event_id(struct kshark_data_stream *stream,
 	return event->id;
 }
 
-int tepdata_read_event_field(struct kshark_data_stream *stream,
-			     const struct kshark_entry *entry,
-			     const char *field,
-			     unsigned long long *val)
+static struct tep_format_field *
+get_evt_field(struct kshark_data_stream *stream,
+	      int event_id, const char *field_name)
+{
+	struct tep_event *event = tep_find_event(kshark_get_tep(stream),
+						 event_id);
+	if (!event)
+		return NULL;
+
+	return tep_find_any_field(event, field_name);
+}
+
+kshark_event_field_format
+tepdata_get_field_type(struct kshark_data_stream *stream,
+		       const struct kshark_entry *entry,
+		       const char *field)
 {
 	struct tep_format_field *evt_field;
-	struct tep_record *record;
-	struct tep_event *event;
-	int ret;
+	int mask = ~(TEP_FIELD_IS_SIGNED |
+		     TEP_FIELD_IS_LONG |
+		     TEP_FIELD_IS_FLAG);
 
-	event = tep_find_event(kshark_get_tep(stream), entry->event_id);
-	if (!event)
-		return -EINVAL;
-
-	evt_field = tep_find_any_field(event, field);
+	evt_field = get_evt_field(stream, entry->event_id, field);
 	if (!evt_field)
-		return -EINVAL;
+		return KS_INVALIDE_FIELD;
 
-	record = tracecmd_read_at(kshark_get_tep_input(stream), entry->offset, NULL);
+	if (mask & evt_field->flags)
+		return KS_INVALIDE_FIELD;
+
+	return KS_INTEGER_FIELD;
+}
+
+int tepdata_read_record_field(struct kshark_data_stream *stream,
+			      void *rec, const char *field,
+			      int64_t *val)
+{
+	struct tep_format_field *evt_field;
+	struct tep_record *record = rec;
+	int event_id, ret;
+
 	if (!record)
 		return -EFAULT;
 
-	ret = tep_read_number_field(evt_field, record->data, val);
+	event_id = tep_data_type(kshark_get_tep(stream), record);
+	evt_field = get_evt_field(stream, event_id, field);
+	if (!evt_field)
+		return -EINVAL;
+
+	ret = tep_read_number_field(evt_field, record->data,
+				    (unsigned long long *) val);
+
+	return ret;
+}
+
+int tepdata_read_event_field(struct kshark_data_stream *stream,
+			     const struct kshark_entry *entry,
+			     const char *field, int64_t *val)
+{
+	struct tep_format_field *evt_field;
+	struct tep_record *record;
+	int ret;
+
+	evt_field = get_evt_field(stream, entry->event_id, field);
+	if (!evt_field)
+		return -EINVAL;
+
+	record = tracecmd_read_at(kshark_get_tep_input(stream),
+				  entry->offset, NULL);
+	if (!record)
+		return -EFAULT;
+
+	ret = tep_read_number_field(evt_field, record->data,
+				    (unsigned long long *) val);
 	free_record(record);
 
 	return ret;
+}
+
+int tepdata_get_event_field_type(struct kshark_data_stream *stream,
+				 const struct kshark_entry *entry,
+				 const char *field)
+{
+	return 0;
 }
 
 /** Initialize all methods used by a stream of FTRACE data. */
@@ -975,21 +1063,26 @@ static void kshark_tep_init_methods(struct kshark_data_stream *stream)
 	stream->interface.find_event_id = tepdata_find_event_id;
 	stream->interface.get_all_event_ids = tepdata_get_event_ids;
 	stream->interface.dump_entry = tepdata_dump_entry;
-	stream->interface.read_event_field = tepdata_read_event_field;
+	stream->interface.get_all_field_names = tepdata_get_field_names;
+	stream->interface.get_event_field_type = tepdata_get_field_type;
+	stream->interface.read_record_field_int64 = tepdata_read_record_field;
+	stream->interface.read_event_field_int64 = tepdata_read_event_field;
 	stream->interface.load_entries = tepdata_load_entries;
 	stream->interface.load_matrix = tepdata_load_matrix;
 }
 
-const char *tep_plugin_names[] = {"sched_events",
-				  "missed_events",
-				  "kvm_combo"};
+const char *tep_plugin_names[] = {
+	"sched_events",
+	"missed_events",
+	"kvm_combo",
+};
 
 #define LINUX_IDLE_TASK_PID	0
 
 /** Find a host stream from the same tracing session, that has guest information */
-static
-struct tracecmd_input *kshark_tep_find_merge_peer(struct kshark_context *kshark_ctx,
-						  struct tracecmd_input *handle)
+static struct tracecmd_input *
+kshark_tep_find_merge_peer(struct kshark_context *kshark_ctx,
+			   struct tracecmd_input *handle)
 {
 	struct tracecmd_input *peer_handle = NULL;
 	struct kshark_data_stream *peer_stream;
@@ -1245,49 +1338,6 @@ int kshark_tep_filter_remove_event(struct kshark_data_stream *stream,
 void kshark_tep_filter_reset(struct kshark_data_stream *stream)
 {
 	return tep_filter_reset(get_adv_filter(stream));
-}
-
-/**
- * @brief Get the names of all fields of a given event type.
- *
- * @param stream: Input location for the FTRACE data stream pointer.
- * @param event_id: The unique Id of the event type of the filter.
- * @param fields_str: Output location for the array of field names. The user
- *		      is responsible for freeing this array of strings.
- *
- * @return Tne number of fields on success, or a negative error code on
- *	   failure.
- */
-int kshark_tep_get_event_fields(struct kshark_data_stream *stream,
-				int event_id,
-				char ***fields_str)
-{
-	struct tep_format_field *field, **fields;
-	struct tep_event *event;
-	int i= 0, nr_fields;
-	char **buffer;
-
-	*fields_str = NULL;
-	event = tep_find_event(kshark_get_tep(stream), event_id);
-	if (!event)
-		return 0;
-
-	nr_fields = event->format.nr_fields;
-	buffer = calloc(nr_fields, sizeof(**fields_str));
-
-	fields = tep_event_fields(event);
-	for (field = *fields; field; field = field->next)
-		if (asprintf(&buffer[i++], "%s", field->name) <= 0)
-			goto fail;
-
-	*fields_str = buffer;
-	return nr_fields;
-
- fail:
-	for (i = 0; i < nr_fields; ++i)
-		free(buffer[i]);
-
-	return -EFAULT;
 }
 
 /** Get an array of available tracer plugins. */
