@@ -9,8 +9,10 @@
  *  @brief   API for processing of FTRACE (trace-cmd) data.
  */
 
+#ifndef _GNU_SOURCE
 /** Use GNU C Library. */
-#define _GNU_SOURCE 1
+#define _GNU_SOURCE
+#endif // _GNU_SOURCE
 
 // C
 #include <stdlib.h>

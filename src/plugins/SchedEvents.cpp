@@ -96,7 +96,7 @@ static void secondPass(plugin_sched_context *plugin_ctx)
  */
 void plugin_draw(kshark_cpp_argv *argv_c, int sd, int pid, int draw_action)
 {
-	plugin_sched_context *plugin_ctx = get_sched_context(sd);
+	plugin_sched_context *plugin_ctx;
 
 	if (!(draw_action & KsPlot::KSHARK_TASK_DRAW) || pid == 0)
 		return;
@@ -120,7 +120,7 @@ void plugin_draw(kshark_cpp_argv *argv_c, int sd, int pid, int draw_action)
 
 	IsApplicableFunc checkFieldSS = [=] (kshark_data_container *d,
 					     ssize_t i) {
-		return plugin_sched_get_prev_state(d->data[i]->field) != 0x7f &&
+		return !(plugin_sched_get_prev_state(d->data[i]->field) & 0x7f) &&
 		       plugin_sched_get_pid(d->data[i]->field) == pid;
 	};
 

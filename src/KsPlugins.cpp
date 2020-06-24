@@ -256,6 +256,9 @@ void eventFieldPlot(KsCppArgV *argvCpp,
 {
 	PlotPointList buffer;
 
+	if (dataEvt->size == 0)
+		return;
+
 	if (!dataEvt->sorted)
 		kshark_data_container_sort(dataEvt);
 
@@ -313,6 +316,9 @@ void eventFieldIntervalPlot(KsCppArgV *argvCpp,
 			    KsPlot::Color col,
 			    float size)
 {
+	if (dataEvtA->size == 0 || dataEvtB->size == 0)
+		return;
+
 	if (!dataEvtA->sorted)
 		kshark_data_container_sort(dataEvtA);
 

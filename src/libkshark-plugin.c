@@ -13,8 +13,7 @@
 #ifndef _GNU_SOURCE
 /** Use GNU C Library. */
 #define _GNU_SOURCE
-
-#endif
+#endif // _GNU_SOURCE
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -146,7 +145,6 @@ void kshark_free_event_handler_list(struct kshark_event_proc_handler *handlers)
 		free(last);
 	}
 }
-
 
 /**
  * @brief Add new event handler to an existing list of handlers.

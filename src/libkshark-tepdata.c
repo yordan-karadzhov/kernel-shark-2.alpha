@@ -9,10 +9,13 @@
  *  @brief   API for processing of FTRACE (trace-cmd) data.
  */
 
-/** Use GNU C Library. */
-#define _GNU_SOURCE 1
 
 // C
+#ifndef _GNU_SOURCE
+/** Use GNU C Library. */
+#define _GNU_SOURCE
+#endif // _GNU_SOURCE
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1075,6 +1078,7 @@ const char *tep_plugin_names[] = {
 	"sched_events",
 	"missed_events",
 	"kvm_combo",
+	"latency_plot",
 };
 
 #define LINUX_IDLE_TASK_PID	0
@@ -1202,6 +1206,9 @@ int kshark_tep_init_input(struct kshark_data_stream *stream,
 			kshark_register_plugin_to_stream(stream,
 							 plugin->process_interface,
 							 true);
+		} else {
+			fprintf(stderr, "Plugin \"%s\" not found.\n",
+				tep_plugin_names[i]);
 		}
 	}
 

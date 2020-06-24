@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LGPL-2.1
 
 /*
- * Copyright (C) 2018 VMware Inc, Yordan Karadzhov (VMware) <y.karadz@gmail.com>
+ * Copyright (C) 2020 VMware Inc, Yordan Karadzhov (VMware) <y.karadz@gmail.com>
  */
 
 /**
@@ -10,7 +10,6 @@
  */
 
 // C++
-#include <iostream>
 #include <vector>
 
 // KernelShark
@@ -79,7 +78,7 @@ void draw_event_field(kshark_cpp_argv *argv_c,
 		Point p0(x, y + mod), p1(x, y - mod);
 		Line *l = new Line(p0, p1);
 		c.setRainbowColor(mod - 1);
-		l->_size = binSize * 2;
+		l->_size = binSize + 1;
 		l->_color = c;
 
 		return l;
@@ -90,7 +89,7 @@ void draw_event_field(kshark_cpp_argv *argv_c,
 			return d->data[i]->entry->cpu == val;
 		};
 
-	if (draw_action & KSHARK_TASK_DRAW)
+	else if (draw_action & KSHARK_TASK_DRAW)
 		checkEntry = [=] (kshark_data_container *d, ssize_t i) {
 			return d->data[i]->entry->pid == val;
 		};

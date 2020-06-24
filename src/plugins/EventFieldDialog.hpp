@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: LGPL-2.1 */
 
 /*
- * Copyright (C) 2019 VMware Inc, Yordan Karadzhov <ykaradzhov@vmware.com>
+ * Copyright (C) 2020 VMware Inc, Yordan Karadzhov <ykaradzhov@vmware.com>
  */
 
 /**
@@ -12,17 +12,17 @@
 #ifndef _KS_EFP_DIALOG_H
 #define _KS_EFP_DIALOG_H
 
-// Qt
-#include <QtWidgets>
-
 // KernelShark
 #include "plugins/event_field_plot.h"
+#include "KsWidgetsLib.hpp"
 
 class KsMainWindow;
+
 /**
  * The KsEFPDialog class provides a widget for selecting Trace event field to
  * be visualized.
  */
+
 class KsEFPDialog : public QDialog
 {
 	Q_OBJECT
@@ -31,13 +31,9 @@ public:
 
 	void update();
 
-	int streamId() const {return _streamComboBox.currentData().toInt();}
-
-	QString eventName() const {return _eventComboBox.currentText();}
-
-	QString fieldName() const {return _fieldComboBox.currentText();}
-
 	val_select_func selectCondition(plugin_efp_context *plugin_ctx);
+
+	KsWidgetsLib::KsEventFieldSelectWidget	_efsWidget;
 
 	KsMainWindow	*_gui_ptr;
 
@@ -46,22 +42,13 @@ private:
 
 	QHBoxLayout	_buttonLayout;
 
-	QComboBox	_streamComboBox, _eventComboBox;
+	QComboBox	_selectComboBox;
 
-	QComboBox	_fieldComboBox, _selectComboBox;
-
-	QLabel		_streamLabel, _eventLabel, _fieldLabel, _selectLabel;
+	QLabel		_selectLabel;
 
 	QPushButton	_applyButton, _resetButton, _cancelButton;
 
 	void _setSelectCombo();
-
-	void _setStreamCombo(kshark_context *kshark_ctx);
-
-private slots:
-	void _streamChanged(const QString &stream);
-
-	void _eventChanged(const QString &event);
 
 	void _apply();
 

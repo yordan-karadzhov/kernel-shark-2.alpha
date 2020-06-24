@@ -6,10 +6,7 @@
 
 /**
  *  @file    sched_events.c
- *  @brief   Defines a callback function for Sched events used to registers the
- *	     "next" task (if not registered already) and to changes the value
- *	     of the "pid" field of the "sched_switch" entries such that, it
- *	     will be ploted as part of the "next" task.
+ *  @brief
  */
 
 // C

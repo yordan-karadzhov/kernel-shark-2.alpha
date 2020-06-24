@@ -100,9 +100,7 @@ static void plugin_get_field(struct kshark_data_stream *stream, void *rec,
 						  plugin_ctx->field_name,
 						  &val);
 
-	kshark_data_container_append(plugin_ctx->data,
-				     entry,
-				     val);
+	kshark_data_container_append(plugin_ctx->data, entry, val);
 
 	if (val > plugin_ctx->field_max)
 		plugin_ctx->field_max = val;

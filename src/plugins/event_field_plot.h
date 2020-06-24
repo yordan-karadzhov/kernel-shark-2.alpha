@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: LGPL-2.1 */
 
 /*
- * Copyright (C) 2019 VMware Inc, Yordan Karadzhov (VMware) <y.karadz@gmail.com>
+ * Copyright (C) 2020 VMware Inc, Yordan Karadzhov (VMware) <y.karadz@gmail.com>
  */
 
 /**
@@ -25,12 +25,6 @@ typedef bool (*val_select_func) (unsigned long long,
 
 /** Structure representing a plugin-specific context. */
 struct plugin_efp_context {
-	/** Input handle for the trace data file. */
-	struct tracecmd_input	*handle;
-
-	/** Page event used to parse the page. */
-	struct tep_handle	*pevent;
-
 	/** Trace event name. */
 	char 		*event_name;
 
@@ -43,7 +37,7 @@ struct plugin_efp_context {
 	/** The min value of the field in the data. */
 	int64_t		field_min;
 
-	/** Trace event Identifier. */
+	/** Trace event identifier. */
 	int		event_id;
 
 	/** . */
@@ -62,8 +56,6 @@ void draw_event_field(struct kshark_cpp_argv *argv_c,
 		      int sd, int pid, int draw_action);
 
 void *plugin_efp_add_menu(void *gui_ptr);
-
-int plugin_get_stream_id();
 
 void plugin_set_event_name(struct plugin_efp_context *plugin_ctx);
 

@@ -1167,4 +1167,144 @@ KsDStreamCheckBoxWidget::KsDStreamCheckBoxWidget(QWidget *parent)
 	free(streamIds);
 }
 
+
+KsEventFieldSelectWidget::KsEventFieldSelectWidget(QWidget *parent)
+: QWidget(parent),
+  _streamLabel("Data stream", this),
+  _eventLabel("Event (type in for searching)", this),
+  _fieldLabel("Field", this)
+{
+	auto lamAddLine = [&] {
+		QFrame* line = new QFrame();
+		QSpacerItem *spacer = new QSpacerItem(1, FONT_HEIGHT / 2,
+						      QSizePolicy::Expanding,
+						      QSizePolicy::Minimum);
+		line->setFrameShape(QFrame::HLine);
+		line->setFrameShadow(QFrame::Sunken);
+		_topLayout.addSpacerItem(spacer);
+		_topLayout.addWidget(line);
+	};
+
+	_topLayout.addWidget(&_streamLabel);
+	_topLayout.addWidget(&_streamComboBox);
+
+	/*
+	 * Using the old Signal-Slot syntax because QComboBox::currentIndexChanged
+	 * has overloads.
+	 */
+	connect(&_streamComboBox,	SIGNAL(currentIndexChanged(const QString&)),
+		this,			SLOT(_streamChanged(const QString&)));
+
+	lamAddLine();
+
+	_topLayout.addWidget(&_eventLabel);
+	_topLayout.addWidget(&_eventComboBox);
+	_eventComboBox.setEditable(true);
+	_eventComboBox.view()->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+	_eventComboBox.setMaxVisibleItems(25);
+
+	/*
+	 * Using the old Signal-Slot syntax because QComboBox::currentIndexChanged
+	 * has overloads.
+	 */
+	connect(&_eventComboBox,	SIGNAL(currentIndexChanged(const QString&)),
+		this,			SLOT(_eventChanged(const QString&)));
+
+	lamAddLine();
+
+	_topLayout.addWidget(&_fieldLabel);
+	_topLayout.addWidget(&_fieldComboBox);
+
+	lamAddLine();
+
+	setLayout(&_topLayout);
+}
+
+void KsEventFieldSelectWidget::setStreamCombo()
+{
+	kshark_context *kshark_ctx(NULL);
+	kshark_data_stream *stream;
+	int sd, *streamIds;
+
+	if (!kshark_instance(&kshark_ctx))
+		return;
+
+	streamIds = kshark_all_streams(kshark_ctx);
+
+	for (int i = 0; i < kshark_ctx->n_streams; ++i) {
+		sd = streamIds[i];
+		stream = kshark_ctx->stream[sd];
+		if (_streamComboBox.findData(sd) < 0)
+			_streamComboBox.addItem(QString(stream->file), sd);
+	}
+	free(streamIds);
+}
+
+void KsEventFieldSelectWidget::_streamChanged(const QString &streamFile)
+{
+	int sd = _streamComboBox.currentData().toInt();
+	kshark_context *kshark_ctx(NULL);
+	kshark_data_stream *stream;
+	kshark_entry entry;
+	QStringList evtsList;
+	int *eventIds;
+
+	_eventComboBox.clear();
+	if (!kshark_instance(&kshark_ctx))
+		return;
+
+	stream = kshark_get_data_stream(kshark_ctx, sd);
+	if (!stream)
+		return;
+
+	eventIds = kshark_get_all_event_ids(stream);
+	entry.stream_id = stream->stream_id;
+	entry.visible = 0xff;
+	for (int i = 0; i < stream->n_events; ++i) {
+		entry.event_id = eventIds[i];
+		evtsList << QString(kshark_get_event_name(&entry));
+	}
+
+	qSort(evtsList);
+	_eventComboBox.addItems(evtsList);
+}
+
+void KsEventFieldSelectWidget::_eventChanged(const QString &eventName)
+{
+	int nFields, sd = _streamComboBox.currentData().toInt();
+	kshark_context *kshark_ctx(NULL);
+	kshark_data_stream *stream;
+	kshark_entry entry;
+	QStringList fieldsList;
+	std::string buff;
+	char **fields;
+
+	_fieldComboBox.clear();
+	if (!kshark_instance(&kshark_ctx))
+		return;
+
+	stream = kshark_get_data_stream(kshark_ctx, sd);
+	if (!stream)
+		return;
+
+	buff = eventName.toStdString();
+	entry.event_id = stream->interface.find_event_id(stream, buff.c_str());
+	nFields = stream->interface.get_all_field_names(stream, &entry, &fields);
+
+	auto lamGetType = [&] (int i) {
+		return stream->interface.get_event_field_type(stream, &entry,
+							      fields[i]);
+	};
+
+	for (int i = 0; i < nFields; ++i) {
+		if (lamGetType(i))
+			fieldsList << fields[i];
+
+		free(fields[i]);
+	}
+
+	qSort(fieldsList);
+	_fieldComboBox.addItems(fieldsList);
+}
+
 }; // KsWidgetsLib

@@ -525,7 +525,8 @@ public:
 	/* Keep this destructor virtual. */
 	virtual ~Graph();
 
-	int size();
+	/** Get the number of bins. */
+	int size() const { return _size;}
 
 	void setModelPtr(kshark_trace_histo *histo);
 

@@ -1353,5 +1353,8 @@ int ksmodel_get_bin(struct kshark_trace_histo *histo,
 	if (entry->ts > histo->max)
 		return LOWER_OVERFLOW_BIN;
 
+	if (entry->ts == histo->max)
+		return histo->n_bins - 1;
+
 	return  (entry->ts - histo->min) / histo->bin_size;
 }

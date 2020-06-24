@@ -51,6 +51,7 @@ KsQuickContextMenu::KsQuickContextMenu(KsDualMarkerSM *dm,
   _data(data),
   _row(row),
   _rawTime(this),
+  _rawEvent(this),
   _graphSyncCBox(nullptr),
   _listSyncCBox(nullptr),
   _hideTaskAction(this),
@@ -68,21 +69,50 @@ KsQuickContextMenu::KsQuickContextMenu(KsDualMarkerSM *dm,
 	typedef void (KsQuickContextMenu::*mfp)();
 	QString time, taskName, parentName, descr;
 	kshark_entry *entry = _data->rows()[_row];
+	kshark_context *kshark_ctx(nullptr);
+	kshark_data_stream *stream;
+	int pid, cpu, sd, nFields, ret;
 	KsTraceGraph *graphs;
-	int pid, cpu, sd;
+	char **eventFields;
+	int64_t fieldVal;
 
 	if (!parent || !_data)
 		return;
 
-	addSection("Raw time:");
-	time = QString("    %1 [ns]\n").arg(entry->ts);
-	_rawTime.setDefaultWidget(new QLabel(time));
-	addAction(&_rawTime);
+	if (!kshark_instance(&kshark_ctx))
+		return;
 
 	taskName = kshark_get_task(entry);
 	pid = kshark_get_pid(entry);
 	cpu = entry->cpu;
 	sd = entry->stream_id;
+
+	stream = kshark_get_data_stream(kshark_ctx, sd);
+	if (!stream)
+		return;
+
+	QString evtData("\t"), val;
+	nFields = stream->interface.get_all_field_names(stream, entry,
+							&eventFields);
+	for (int i = 0; i < nFields; ++i) {
+		ret = stream->interface.read_event_field_int64(stream,
+							       entry,
+							       eventFields[i],
+							       &fieldVal);
+		if (ret < 0)
+			continue;
+
+		evtData += QString(eventFields[i]) + ":  " +
+			   val.setNum(fieldVal) + "\n\t";
+	}
+
+	addSection("Raw event");
+	time = QString("\ttime:  %1 [ns]").arg(entry->ts);
+
+	_rawTime.setDefaultWidget(new QLabel(time));
+	addAction(&_rawTime);
+	_rawEvent.setDefaultWidget(new QLabel(evtData));
+	addAction(&_rawEvent);
 
 	auto lamAddAction = [this, &descr] (QAction *action, mfp mf) {
 		action->setText(descr);

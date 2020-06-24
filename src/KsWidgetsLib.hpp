@@ -570,6 +570,39 @@ struct KsDStreamCheckBoxWidget : public KsCheckBoxTableWidget
 	explicit KsDStreamCheckBoxWidget(QWidget *parent = nullptr);
 };
 
+/**
+ * The KsEventFieldSelectWidget class provides a widget for selecting a data
+ * field of the trace event.
+ */
+class KsEventFieldSelectWidget : public QWidget
+{
+	Q_OBJECT
+public:
+	explicit KsEventFieldSelectWidget(QWidget *parent = nullptr);
+
+	void update();
+
+	int streamId() const {return _streamComboBox.currentData().toInt();}
+
+	QString eventName() const {return _eventComboBox.currentText();}
+
+	QString fieldName() const {return _fieldComboBox.currentText();}
+
+	void setStreamCombo();
+
+private slots:
+	void _streamChanged(const QString &stream);
+
+	void _eventChanged(const QString &event);
+
+private:
+	QVBoxLayout	_topLayout;
+
+	QComboBox	_streamComboBox, _eventComboBox, _fieldComboBox;
+
+	QLabel		_streamLabel, _eventLabel, _fieldLabel;
+};
+
 }; // KsWidgetsLib
 
 #endif

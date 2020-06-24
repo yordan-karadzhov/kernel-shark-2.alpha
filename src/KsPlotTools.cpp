@@ -825,14 +825,6 @@ void Graph::_initBins()
 }
 
 /**
- *  Get the number of bins.
- */
-int Graph::size()
-{
-	return _size;
-}
-
-/**
  * @brief Reinitialize the Graph according to the Vis. model.
  *
  * @param histo: Input location for the model descriptor.

@@ -116,7 +116,7 @@ void draw_missed_events(kshark_cpp_argv *argv_c,
 							       nullptr);
 		};
 
-	if (draw_action & KSHARK_TASK_DRAW)
+	else if (draw_action & KSHARK_TASK_DRAW)
 		checkEntry = [=] (kshark_data_container *, ssize_t bin) {
 			return !!ksmodel_get_task_missed_events(argvCpp->_histo,
 								bin, sd, val,

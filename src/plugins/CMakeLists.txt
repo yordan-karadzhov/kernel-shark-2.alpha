@@ -56,7 +56,12 @@ BUILD_GUI_PLUGIN(NAME event_field_plot
                  SOURCE event_field_plot.c EventFieldDialog.cpp EventFieldPlot.cpp)
 list(APPEND PLUGIN_LIST "event_field_plot")
 
-install(TARGETS sched_events missed_events kvm_combo event_field_plot
+BUILD_GUI_PLUGIN(NAME latency_plot
+                 MOC LatencyPlotDialog.hpp
+                 SOURCE latency_plot.c LatencyPlot.cpp LatencyPlotDialog.cpp)
+list(APPEND PLUGIN_LIST "latency_plot")
+
+install(TARGETS sched_events missed_events kvm_combo event_field_plot latency_plot
         LIBRARY DESTINATION ${KS_PLUGIN_INSTALL_PREFIX})
 
 set(PLUGINS ${PLUGIN_LIST} PARENT_SCOPE)

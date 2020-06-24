@@ -13,8 +13,8 @@
 #ifndef _GNU_SOURCE
 /** Use GNU C Library. */
 #define _GNU_SOURCE
+#endif // _GNU_SOURCE
 
-#endif
 #include <stdio.h>
 
 // KernelShark
