@@ -832,13 +832,22 @@ static int tepdata_get_field_names(struct kshark_data_stream *stream,
 	if (!event)
 		return 0;
 
-	nr_fields = event->format.nr_fields;
+	nr_fields = event->format.nr_fields + event->format.nr_common;
 	buffer = calloc(nr_fields, sizeof(**fields_str));
+
+	fields = tep_event_common_fields(event);
+	for (field = *fields; field; field = field->next)
+		if (asprintf(&buffer[i++], "%s", field->name) <= 0)
+			goto fail;
+
+	free(fields);
 
 	fields = tep_event_fields(event);
 	for (field = *fields; field; field = field->next)
 		if (asprintf(&buffer[i++], "%s", field->name) <= 0)
 			goto fail;
+
+	free(fields);
 
 	*fields_str = buffer;
 	return nr_fields;
