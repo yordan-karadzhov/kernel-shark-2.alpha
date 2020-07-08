@@ -53,6 +53,7 @@ plugin_efp_init_context(struct kshark_data_stream *stream)
 
 	plugin_efp_context_handler[sd] = plugin_ctx =
 		calloc(1, sizeof(*plugin_ctx));
+
 	if (!plugin_ctx) {
 		fprintf(stderr,
 			"Failed to allocate memory for plugin event_field_plot.\n");

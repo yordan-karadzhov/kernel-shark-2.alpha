@@ -35,13 +35,14 @@ void usage(const char *prog)
 
 int main(int argc, char **argv)
 {
+	bool fromSession = false;
+	int c;
+
 	QApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
 	QApplication a(argc, argv);
 
 	KsMainWindow ks;
-
-	int c;
-	bool fromSession = false;
+	ks.show();
 
 	while ((c = getopt(argc, argv, "hvi:a:p:u:s:l")) != -1) {
 		switch(c) {
@@ -104,6 +105,6 @@ int main(int argc, char **argv)
 			ks.appendDataFile(f);
 	}
 
-	ks.show();
+	ks.raise();
 	return a.exec();
 }

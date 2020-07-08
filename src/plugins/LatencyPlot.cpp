@@ -79,7 +79,7 @@ static void secondPass(plugin_latency_context *plugin_ctx)
 				/*
 				 * We only care about the "B evenys" that are
 				 * after (in time) the current "A event".
-				 * Skip these "B events" when you search to
+				 * Skip these "B events", when you search to
 				 * pair the next "A event".
 				 */
 				++iB;
@@ -101,9 +101,8 @@ static void secondPass(plugin_latency_context *plugin_ctx)
 					plugin_ctx->max_latency = delta;
 
 				/*
-				 * Store this pair of events in the hash tables.
-				 *
-				 * Use the CPU as a key.
+				 * Store this pair of events in the hash
+				 * tables. Use the CPU Id as a key.
 				 */
 				LATENCY_EMPLACE(latencyCPUMap,
 						dataB[i]->entry->cpu,
@@ -126,26 +125,54 @@ static void secondPass(plugin_latency_context *plugin_ctx)
 #define LIFT_BASE(point, graph) \
 	point.setY(point.y() - graph->height() * .8) \
 
-Line *plotLine(const Point &p0, const Point &p1)
-{
-	Line *l = new Line(p0, p1);
-	l->_color = {255, 165, 0}; // Orange
-	return l;
-}
+#define ORANGE {255, 165, 0}
 
 Line *baseLine(Graph *graph)
 {
 	Point p0, p1;
+	Line *l;
 
 	p0 = graph->getBin(0)._base;
 	LIFT_BASE(p0, graph);
 	p1 = graph->getBin(graph->size() - 1)._base;
 	LIFT_BASE(p1, graph);
 
-	return plotLine(p0, p1);
+	l = new Line(p0, p1);
+	l->_color = ORANGE;
+	return l;
 }
 
-Line *tick(Graph *graph, int bin, int height)
+class LatencyTick : public Line {
+public:
+	LatencyTick() = delete;
+	LatencyTick(const Point &p0, const Point &p1, const LatencyPair &l)
+	: Line(p0, p1), _l(l) {
+		_color = ORANGE;
+	}
+
+	double distance(int x, int y) override
+	{
+		int dx, dy;
+
+		dx = getPointX(0) - x;
+		dy = getPointY(0) - y;
+
+		return sqrt(dx *dx + dy * dy);
+	}
+
+private:
+	LatencyPair _l;
+	void _doubleClick() const override;
+
+};
+
+void LatencyTick::_doubleClick() const
+{
+	plugin_mark_entry(_l.first, 'A');
+	plugin_mark_entry(_l.second, 'B');
+}
+
+LatencyTick *tick(Graph *graph, int bin, int height, const LatencyPair &l)
 {
 	Point p0, p1;
 
@@ -154,7 +181,7 @@ Line *tick(Graph *graph, int bin, int height)
 	p1 = p0;
 	p1.setY(p1.y() - height);
 
-	return plotLine(p0, p1);
+	return new LatencyTick(p0, p1, l);
 
 }
 
@@ -206,7 +233,7 @@ void draw_latency(struct kshark_cpp_argv *argv_c,
 
 		height = (eB->ts - eA->ts) / (double) plugin_ctx->max_latency;
 		height *= graphHeight * .6;
-		return height + 2;
+		return height + 4;
 	};
 
 	auto lamPlotLat = [=] (auto p) {
@@ -214,11 +241,11 @@ void draw_latency(struct kshark_cpp_argv *argv_c,
 		kshark_entry *eB = p.second.second;
 		int binB = ksmodel_get_bin(histo, eB);
 
-		if (binB < 0)
-			return;
-
-		shapes->push_front(tick(thisGraph, binB,
-					lamScaledDelta(eA, eB)));
+		if (binB >= 0)
+			shapes->push_front(tick(thisGraph,
+					   binB,
+					   lamScaledDelta(eA, eB),
+					   p.second));
 	};
 
 	/*

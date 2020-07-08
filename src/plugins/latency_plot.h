@@ -53,6 +53,8 @@ void *plugin_latency_add_menu(void *gui_ptr);
 
 void plugin_set_event_fields(struct plugin_latency_context *plugin_ctx);
 
+void plugin_mark_entry(const struct kshark_entry *e, char mark);
+
 #ifdef __cplusplus
 }
 #endif

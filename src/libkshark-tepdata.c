@@ -972,6 +972,9 @@ static const int tepdata_find_event_id(struct kshark_data_stream *stream,
 		return -1;
 
 	event = tep_find_event_by_name(kshark_get_tep(stream), system, name);
+
+	free(buffer);
+
 	if (!event)
 		return -1;
 
@@ -1087,7 +1090,6 @@ const char *tep_plugin_names[] = {
 	"sched_events",
 	"missed_events",
 	"kvm_combo",
-	"latency_plot",
 };
 
 #define LINUX_IDLE_TASK_PID	0

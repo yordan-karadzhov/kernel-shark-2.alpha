@@ -540,6 +540,8 @@ void KsTraceGraph::update(KsDataStore *data)
 							25);
 		}
 	}
+
+	free(streamIds);
 }
 
 /** Update the geometry of the widget. */

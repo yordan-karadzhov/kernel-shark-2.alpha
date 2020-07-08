@@ -1282,16 +1282,48 @@ bool ksmodel_task_visible_event_exist(struct kshark_trace_histo *histo,
 	return true;
 }
 
+static bool match_missed_events(struct kshark_context *kshark_ctx,
+				    struct kshark_entry *e, int sd, int *unused)
+{
+	return e->event_id == KS_EVENT_OVERFLOW;
+}
+
+/**
+ * @brief Start from the front end of the bin and go towards
+ *	  the back end, searching for a Missed Events entry.
+ *
+ * @param histo: Input location for the model descriptor.
+ * @param bin: Bin id.
+ * @param sd: Data stream identifier.
+ * @param col: Optional input location for Data collection.
+ * @param index: Optional output location for the index of the requested
+ *		 entry inside the array.
+ *
+ * @returns Pointer ot a kshark_entry, if an entry has been found. Else NULL.
+ */
+const struct kshark_entry *
+ksmodel_get_missed_events(struct kshark_trace_histo *histo,
+			  int bin, int sd,
+			  struct kshark_entry_collection *col,
+			  ssize_t *index)
+{
+	return ksmodel_get_entry_front(histo, bin, true,
+				       match_missed_events, sd, 0,
+				       col, index);
+}
+
 static bool match_cpu_missed_events(struct kshark_context *kshark_ctx,
 				    struct kshark_entry *e, int sd, int *cpu)
 {
-	return e->event_id == -EOVERFLOW && e->cpu == *cpu && e->stream_id == sd;
+	return e->event_id == KS_EVENT_OVERFLOW &&
+	       e->cpu == *cpu && e->stream_id == sd;
 }
 
 static bool match_pid_missed_events(struct kshark_context *kshark_ctx,
 				    struct kshark_entry *e, int sd, int *pid)
 {
-	return e->event_id == -EOVERFLOW && e->pid == *pid && e->stream_id == sd;
+	return e->event_id == KS_EVENT_OVERFLOW &&
+	       e->pid == *pid && e->stream_id == sd;
 }
 
 /**

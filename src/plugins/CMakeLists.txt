@@ -47,7 +47,7 @@ BUILD_PLUGIN(NAME missed_events
 list(APPEND PLUGIN_LIST "missed_events")
 
 BUILD_GUI_PLUGIN(NAME kvm_combo
-                 MOC KVMCombo.hpp
+                 MOC KVMComboDialog.hpp
                  SOURCE kvm_combo.c KVMCombo.cpp)
 list(APPEND PLUGIN_LIST "kvm_combo")
 

@@ -144,10 +144,10 @@ static void drawVirt(kshark_trace_histo *histo,
 	}
 }
 
-static void drawCombos(kshark_cpp_argv *argv_c,
-		       int sdHost, int pidHost,
-		       int entryId, int exitId,
-		       int draw_action)
+static void drawVirtCombos(kshark_cpp_argv *argv_c,
+			   int sdHost, int pidHost,
+			   int entryId, int exitId,
+			   int draw_action)
 {
 	KsCppArgV *argvCpp;
 

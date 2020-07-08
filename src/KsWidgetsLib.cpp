@@ -1248,6 +1248,7 @@ void KsEventFieldSelectWidget::_streamChanged(const QString &streamFile)
 	kshark_entry entry;
 	QStringList evtsList;
 	int *eventIds;
+	char *buff;
 
 	_eventComboBox.clear();
 	if (!kshark_instance(&kshark_ctx))
@@ -1262,8 +1263,12 @@ void KsEventFieldSelectWidget::_streamChanged(const QString &streamFile)
 	entry.visible = 0xff;
 	for (int i = 0; i < stream->n_events; ++i) {
 		entry.event_id = eventIds[i];
-		evtsList << QString(kshark_get_event_name(&entry));
+		buff = kshark_get_event_name(&entry);
+		evtsList << QString(buff);
+		free(buff);
 	}
+
+	free(eventIds);
 
 	qSort(evtsList);
 	_eventComboBox.addItems(evtsList);
@@ -1302,6 +1307,8 @@ void KsEventFieldSelectWidget::_eventChanged(const QString &eventName)
 
 		free(fields[i]);
 	}
+
+	free(fields);
 
 	qSort(fieldsList);
 	_fieldComboBox.addItems(fieldsList);

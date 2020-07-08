@@ -12,7 +12,11 @@
 #ifndef _KS_PLOT_TOOLS_H
 #define _KS_PLOT_TOOLS_H
 
+// C
+#include <math.h>
+
 // C++
+#include <limits>
 #include <list>
 #include <unordered_map>
 
@@ -130,6 +134,15 @@ public:
 			_draw(_color, _size);
 	}
 
+	void doubleClick() const {
+		if (_visible)
+			_doubleClick();
+	}
+
+	virtual double distance(int x, int y) {
+		return std::numeric_limits<double>::max();
+	}
+
 	/** Is this object visible. */
 	bool	_visible;
 
@@ -141,6 +154,8 @@ public:
 
 private:
 	virtual void _draw(const Color &col, float s) const = 0;
+
+	virtual void _doubleClick() const {}
 };
 
 /** List of graphical element. */
@@ -161,6 +176,21 @@ public:
 
 	/* Keep this destructor virtual. */
 	virtual ~Shape();
+
+	ksplot_point center()
+	{
+		ksplot_point c = {0, 0};
+
+		for (size_t i = 0; i < _nPoints; ++i) {
+			c.x += _points[i].x;
+			c.y += _points[i].y;
+		}
+
+		c.x /= _nPoints;
+		c.y /= _nPoints;
+
+		return c;
+	}
 
 	void operator=(const Shape &s);
 

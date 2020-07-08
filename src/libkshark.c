@@ -1471,6 +1471,9 @@ struct kshark_data_container *kshark_init_data_container()
 
 void kshark_free_data_container(struct kshark_data_container *container)
 {
+	for (ssize_t i = 0; i < container->size; ++i)
+		free(container->data[i]);
+
 	free(container->data);
 	free(container);
 }

@@ -122,7 +122,7 @@ void draw_missed_events(kshark_cpp_argv *argv_c,
 								bin, sd, val,
 								nullptr,
 								nullptr);
-	};
+		};
 
 	eventPlot(argvCpp,
 		  checkEntry,

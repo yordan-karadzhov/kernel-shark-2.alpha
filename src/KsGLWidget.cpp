@@ -57,13 +57,28 @@ KsGLWidget::KsGLWidget(QWidget *parent)
 	connect(&_model, SIGNAL(modelReset()), this, SLOT(update()));
 }
 
+void KsGLWidget::_freeGraphs()
+{
+	for (auto &stream: _graphs) {
+		for (auto &g: stream)
+			delete g;
+		stream.resize(0);
+	}
+}
+
+void KsGLWidget::_freePluginShapes()
+{
+	while (!_shapes.empty()) {
+		auto s = _shapes.front();
+		_shapes.pop_front();
+		delete s;
+	}
+}
+
 KsGLWidget::~KsGLWidget()
 {
-	for (auto it = _graphs.constBegin(); it != _graphs.constEnd(); ++it) {
-		int sd = it.key();
-		for (int g = 0; g < it.value().size(); ++g)
-			delete _graphs[sd][g];
-	}
+	_freeGraphs();
+	_freePluginShapes();
 }
 
 /** Reimplemented function used to set up all required OpenGL resources. */
@@ -131,16 +146,11 @@ void KsGLWidget::paintGL()
 		for (auto const &g: stream)
 			g->draw(size);
 
-	while (!_shapes.empty()) {
-		auto s = _shapes.front();
-		_shapes.pop_front();
-
+	for (auto const &s: _shapes) {
 		if (s->_size < 0)
 			s->_size = size + abs(s->_size + 1);
 
 		s->draw();
-
-		delete s;
 	}
 
 	/*
@@ -294,7 +304,21 @@ void KsGLWidget::mouseReleaseEvent(QMouseEvent *event)
 /** Reimplemented event handler used to receive mouse double click events. */
 void KsGLWidget::mouseDoubleClickEvent(QMouseEvent *event)
 {
-	if (event->button() == Qt::LeftButton)
+	KsPlot::PlotObject *pluginClicked(nullptr);
+	double distance, distanceMin = FONT_HEIGHT;
+
+	for (auto const &s: _shapes) {
+		distance = s->distance(event->pos().x(), event->pos().y());
+		if (distance < distanceMin) {
+			distanceMin = distance;
+			pluginClicked = s;
+		}
+	}
+
+	if (pluginClicked)
+		pluginClicked->doubleClick();
+
+	else if (event->button() == Qt::LeftButton)
 		_findAndSelect(event);
 }
 
@@ -592,11 +616,7 @@ void KsGLWidget::_makeGraphs()
 	KsPlot::Graph *g;
 
 	/* The very first thing to do is to clean up. */
-	for (auto &stream: _graphs) {
-		for (auto &g: stream)
-			delete g;
-		stream.resize(0);
-	}
+	_freeGraphs();
 
 	if (!_data || !_data->size())
 		return;
@@ -680,6 +700,9 @@ void KsGLWidget::_makePluginShapes()
 
 	if (!kshark_instance(&kshark_ctx))
 		return;
+
+	/* The very first thing to do is to clean up. */
+	_freePluginShapes();
 
 	cppArgv._histo = _model.histo();
 	cppArgv._shapes = &_shapes;

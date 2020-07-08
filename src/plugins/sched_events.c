@@ -88,8 +88,8 @@ static void plugin_sched_free_context(int sd)
 	if (!plugin_ctx)
 		return;
 
-	kshark_free_data_container(plugin_ctx->ss_data );
-	kshark_free_data_container(plugin_ctx->sw_data );
+	kshark_free_data_container(plugin_ctx->ss_data);
+	kshark_free_data_container(plugin_ctx->sw_data);
 
 	free(plugin_ctx);
 	plugin_sched_context_handler[sd] = NULL;

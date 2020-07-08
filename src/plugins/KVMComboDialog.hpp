@@ -5,7 +5,7 @@
  */
 
 /**
- *  @file    KVMCombo.hpp
+ *  @file    KVMComboDialog.hpp
  *  @brief   Plugin for visualization of KVM exits.
  */
 

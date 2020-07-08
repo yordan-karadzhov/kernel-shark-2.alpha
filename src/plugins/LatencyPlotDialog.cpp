@@ -105,6 +105,15 @@ void plugin_set_event_fields(struct plugin_latency_context *plugin_ctx)
 		plugin_ctx->field_name[1] = name;
 }
 
+void plugin_mark_entry(const kshark_entry *e, char mark)
+{
+	DualMarkerState st = DualMarkerState::A;
+	if (mark == 'B')
+		st = DualMarkerState::B;
+
+	lp_dialog->_gui_ptr->markEntry(e, st);
+}
+
 void LatencyPlotDialog::_apply()
 {
 	auto work = KsWidgetsLib::KsDataWork::UpdatePlugins;
@@ -115,7 +124,7 @@ void LatencyPlotDialog::_apply()
 	 * on large datasets. Show a "Work In Process" warning.
 	 */
 	_gui_ptr->getWipPtr()->show(work);
-	_gui_ptr->registerPluginToStream("event_field_plot", {sdA, sdB});
+	_gui_ptr->registerPluginToStream("latency_plot", {sdA, sdB});
 	_gui_ptr->getWipPtr()->hide(work);
 }
 
@@ -132,7 +141,7 @@ void LatencyPlotDialog::_reset()
 	 * on large datasets. Show a "Work In Process" warning.
 	 */
 	_gui_ptr->getWipPtr()->show(work);
-	_gui_ptr->unregisterPluginFromStream("event_field_plot",
+	_gui_ptr->unregisterPluginFromStream("latency_plot",
 					     KsUtils::getStreamIdList());
 	_gui_ptr->getWipPtr()->hide(work);
 }

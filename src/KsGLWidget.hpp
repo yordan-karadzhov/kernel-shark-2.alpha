@@ -284,6 +284,10 @@ private:
 
 	ksplot_font	_font;
 
+	void _freeGraphs();
+
+	void _freePluginShapes();
+
 	void _drawAxisX(float size);
 
 	int _getMaxLabelSize();

@@ -87,7 +87,11 @@ public:
 
 	KsTraceGraph *graphPtr() {return &_graph;}
 
+	KsTraceViewer *viewPtr() {return &_view;}
+
 	KsWidgetsLib::KsWorkInProgress *getWipPtr() {return &_workInProgress;}
+
+	void markEntry(const kshark_entry *e, DualMarkerState st);
 
 private:
 	QSplitter	_splitter;

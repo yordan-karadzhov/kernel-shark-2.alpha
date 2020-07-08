@@ -21,7 +21,31 @@
 #include "plugins/kvm_combo.h"
 #include "ComboPlotTools.hpp"
 #include "KsPlugins.hpp"
-#include "KVMCombo.hpp"
+#include "KVMComboDialog.hpp"
+
+/**
+ * @brief Plugin's draw function.
+ *
+ * @param argv_c: A C pointer to be converted to KsCppArgV (C++ struct).
+ * @param sdHost: Data stream identifier of the Host.
+ * @param pidHost: Process Id of the virtual CPU process in the Host.
+ * @param draw_action: Draw action identifier.
+ */
+void draw_kvm_combos(kshark_cpp_argv *argv_c,
+		     int sdHost, int pidHost,
+		     int draw_action)
+{
+	plugin_kvm_context *plugin_ctx = get_kvm_context(sdHost);
+	if (!plugin_ctx)
+		return;
+
+	drawVirtCombos(argv_c,
+		       sdHost,
+		       pidHost,
+		       plugin_ctx->vm_entry_id,
+		       plugin_ctx->vm_exit_id,
+		       draw_action);
+}
 
 using namespace KsWidgetsLib;
 
@@ -69,30 +93,6 @@ void *plugin_kvm_add_menu(void *ks_ptr)
 	combo_dialog->_gui_ptr = ks;
 
 	return combo_dialog;
-}
-
-/**
- * @brief Plugin's draw function.
- *
- * @param argv_c: A C pointer to be converted to KsCppArgV (C++ struct).
- * @param sdHost: Data stream identifier of the Host.
- * @param pidHost: Process Id of the virtual CPU process in the Host.
- * @param draw_action: Draw action identifier.
- */
-void draw_kvm_combos(kshark_cpp_argv *argv_c,
-		     int sdHost, int pidHost,
-		     int draw_action)
-{
-	plugin_kvm_context *plugin_ctx = get_kvm_context(sdHost);
-	if (!plugin_ctx)
-		return;
-
-	drawCombos(argv_c,
-		   sdHost,
-		   pidHost,
-		   plugin_ctx->vm_entry_id,
-		   plugin_ctx->vm_exit_id,
-		   draw_action);
 }
 
 /**

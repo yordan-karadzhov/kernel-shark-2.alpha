@@ -514,6 +514,18 @@ void KsMainWindow::addPluginMenu(QString place, pluginActionFunc func)
 	}
 }
 
+void KsMainWindow::markEntry(const kshark_entry *e, DualMarkerState st)
+{
+	ssize_t row = kshark_find_entry_by_time(e->ts, _data.rows(),
+						0, _data.size() - 1);
+
+	if (row >= 0) {
+		_mState.setState(st);
+		_graph.markEntry(row);
+		_view.showRow(row, true);
+	}
+}
+
 void KsMainWindow::_open()
 {
 	QString fileName;
