@@ -194,7 +194,7 @@ void KsAdvFilteringDialog::_setSystemCombo(kshark_context *kshark_ctx)
 		}
 	}
 
-	qSort(sysList);
+	std::sort(sysList.begin(), sysList.end());
 	_systemComboBox.addItems(sysList);
 
 	i = _systemComboBox.findText("ftrace");
@@ -351,7 +351,7 @@ void KsAdvFilteringDialog::_systemChanged(const QString &sysName)
 			evtsList << name[1];
 	}
 
-	qSort(evtsList);
+	std::sort(evtsList.begin(), evtsList.end());
 	_eventComboBox.addItems(evtsList);
 
 	i = _eventComboBox.findText("function");
@@ -386,7 +386,7 @@ KsAdvFilteringDialog::_getEventFormatFields(int eventId)
 
 	free(fields_str);
 
-	qSort(fieldList);
+	std::sort(fieldList.begin(), fieldList.end());
 	return fieldList;
 }
 

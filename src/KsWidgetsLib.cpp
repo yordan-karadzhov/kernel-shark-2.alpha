@@ -1270,7 +1270,7 @@ void KsEventFieldSelectWidget::_streamChanged(const QString &streamFile)
 
 	free(eventIds);
 
-	qSort(evtsList);
+	std::sort(evtsList.begin(), evtsList.end());
 	_eventComboBox.addItems(evtsList);
 }
 
@@ -1310,7 +1310,8 @@ void KsEventFieldSelectWidget::_eventChanged(const QString &eventName)
 
 	free(fields);
 
-	qSort(fieldsList);
+	std::sort(fieldsList.begin(), fieldsList.end());
+
 	_fieldComboBox.addItems(fieldsList);
 }
 

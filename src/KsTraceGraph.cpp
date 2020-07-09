@@ -462,11 +462,13 @@ void KsTraceGraph::comboReDraw(int nCombos, QVector<int> v)
 void KsTraceGraph::addCPUPlot(int sd, int cpu)
 {
 	startOfWork(KsDataWork::EditPlotList);
-	if (_glWindow._streamPlots[sd]._cpuList.contains(cpu))
+	auto list = _glWindow._streamPlots[sd]._cpuList;
+	if (list.contains(cpu))
 		return;
 
-	_glWindow._streamPlots[sd]._cpuList.append(cpu);
-	qSort(_glWindow._streamPlots[sd]._cpuList);
+	list.append(cpu);
+	std::sort(list.begin(), list.end());
+
 	_selfUpdate();
 	endOfWork(KsDataWork::EditPlotList);
 }
@@ -475,11 +477,13 @@ void KsTraceGraph::addCPUPlot(int sd, int cpu)
 void KsTraceGraph::addTaskPlot(int sd, int pid)
 {
 	startOfWork(KsDataWork::EditPlotList);
-	if (_glWindow._streamPlots[sd]._taskList.contains(pid))
+	auto list = _glWindow._streamPlots[sd]._taskList;
+	if (list.contains(pid))
 		return;
 
-	_glWindow._streamPlots[sd]._taskList.append(pid);
-	qSort(_glWindow._streamPlots[sd]._taskList);
+	list.append(pid);
+	std::sort(list.begin(), list.end());
+
 	_selfUpdate();
 	endOfWork(KsDataWork::EditPlotList);
 }
