@@ -325,7 +325,7 @@ void KsCheckBoxWidget::_setStream(uint8_t sd)
 	if (!stream)
 		return;
 
-	_streamName = QString(stream->file);
+	_streamName = QString(stream->name);
 
 	KsUtils::setElidedText(&_stramLabel, _streamName,
 			       Qt::ElideLeft, width());
@@ -1148,7 +1148,7 @@ KsDStreamCheckBoxWidget::KsDStreamCheckBoxWidget(QWidget *parent)
 
 	for (int i = 0; i < nStreams; ++i) {
 		stream = kshark_ctx->stream[streamIds[i]];
-		QString name(stream->file);
+		QString name(stream->name);
 		if (name < 40) {
 			nameItem = new QTableWidgetItem(name);
 		} else {
@@ -1235,7 +1235,7 @@ void KsEventFieldSelectWidget::setStreamCombo()
 		sd = streamIds[i];
 		stream = kshark_ctx->stream[sd];
 		if (_streamComboBox.findData(sd) < 0)
-			_streamComboBox.addItem(QString(stream->file), sd);
+			_streamComboBox.addItem(QString(stream->name), sd);
 	}
 	free(streamIds);
 }

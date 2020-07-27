@@ -250,7 +250,7 @@ void KsComboPlotDialog::update()
 		_guestMapCount = ret;
 
 	KsUtils::setElidedText(&_hostFileLabel,
-			       kshark_ctx->stream[_guestMap[0].host_id]->file,
+			       kshark_ctx->stream[_guestMap[0].host_id]->name,
 			       Qt::ElideLeft, LABEL_WIDTH);
 
 	_guestStreamComboBox.clear();
@@ -260,7 +260,7 @@ void KsComboPlotDialog::update()
 		if (sd >= kshark_ctx->n_streams)
 			continue;
 
-		_guestStreamComboBox.addItem(kshark_ctx->stream[sd]->file, sd);
+		_guestStreamComboBox.addItem(kshark_ctx->stream[sd]->name, sd);
 		color << colTable[sd];
 		_guestStreamComboBox.setItemData(i, QBrush(color),
 						    Qt::BackgroundRole);

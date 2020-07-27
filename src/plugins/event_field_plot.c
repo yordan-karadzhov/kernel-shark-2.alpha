@@ -72,7 +72,7 @@ plugin_efp_init_context(struct kshark_data_stream *stream)
 
 	if (plugin_ctx->event_id < 0) {
 		fprintf(stderr, "Event %s not found in stream %s\n",
-			plugin_ctx->event_name, stream->file);
+			plugin_ctx->event_name, stream->name);
 		goto fail;
 	}
 

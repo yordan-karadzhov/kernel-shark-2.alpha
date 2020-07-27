@@ -137,6 +137,7 @@ static void kshark_stream_free(struct kshark_data_stream *stream)
 
 	free(stream->calib_array);
 	free(stream->file);
+	free(stream->name);
 	free(stream);
 }
 
@@ -255,6 +256,7 @@ int kshark_stream_open(struct kshark_data_stream *stream, const char *file)
 		return -EAGAIN;
 
 	stream->file = strdup(file);
+	stream->name = strdup(file);
 	set_format(kshark_ctx, stream, file);
 
 	switch (stream->format) {

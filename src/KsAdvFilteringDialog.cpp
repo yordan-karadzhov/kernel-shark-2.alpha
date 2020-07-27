@@ -236,7 +236,7 @@ void KsAdvFilteringDialog::_getFtraceStreams(kshark_context *kshark_ctx)
 	for (int i = 0; i < kshark_ctx->n_streams; ++i) {
 		stream = kshark_ctx->stream[streamIds[i]];
 		if (stream->format == KS_TEP_DATA)
-			_streamComboBox.addItem(QString(stream->file),
+			_streamComboBox.addItem(QString(stream->name),
 						streamIds[i]);
 	}
 

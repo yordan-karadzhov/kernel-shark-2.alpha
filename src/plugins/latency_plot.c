@@ -75,7 +75,7 @@ plugin_latency_init_context(struct kshark_data_stream *stream)
 		stream->interface.find_event_id(stream, plugin_ctx->event_name[0]);
 	if (plugin_ctx->event_id[0] < 0) {
 		fprintf(stderr, "Event %s not found in stream %s\n",
-			plugin_ctx->event_name[0], stream->file);
+			plugin_ctx->event_name[0], stream->name);
 		goto fail;
 	}
 
@@ -83,7 +83,7 @@ plugin_latency_init_context(struct kshark_data_stream *stream)
 		stream->interface.find_event_id(stream, plugin_ctx->event_name[1]);
 	if (plugin_ctx->event_id[1] < 0) {
 		fprintf(stderr, "Event %s not found in stream %s\n",
-			plugin_ctx->event_name[1], stream->file);
+			plugin_ctx->event_name[1], stream->name);
 		goto fail;
 	}
 

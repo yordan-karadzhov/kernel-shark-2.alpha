@@ -238,6 +238,9 @@ struct kshark_data_stream {
 	/** Trace data file pathname. */
 	char			*file;
 
+	/** Stream name. */
+	char			*name;
+
 	/** System clock calibration function. */
 	time_calib_func		calib;
 
