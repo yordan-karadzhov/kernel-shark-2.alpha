@@ -16,6 +16,7 @@
 #include <math.h>
 
 // C++
+#include <string>
 #include <limits>
 #include <list>
 #include <unordered_map>
