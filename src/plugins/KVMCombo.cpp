@@ -246,7 +246,12 @@ void KsComboPlotDialog::update()
 	_guestMap = nullptr;
 	_guestMapCount = 0;
 	ret = kshark_tracecmd_get_hostguest_mapping(&_guestMap);
-	if (ret > 0)
+	if (ret <= 0) {
+		QString err("Cannot find host / guest tracing into the loaded streams");
+		QMessageBox msgBox;
+		msgBox.critical(nullptr, "Error", err);
+		return;
+	} else
 		_guestMapCount = ret;
 
 	KsUtils::setElidedText(&_hostFileLabel,
