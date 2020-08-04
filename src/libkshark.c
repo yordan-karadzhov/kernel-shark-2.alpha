@@ -114,8 +114,6 @@ int kshark_open(struct kshark_context *kshark_ctx, const char *file)
 	if (rt < 0)
 		return rt;
 
-	kshark_ctx->n_streams++;
-
 	return sd;
 }
 
@@ -192,19 +190,22 @@ static struct kshark_data_stream *kshark_stream_alloc()
  */
 int kshark_add_stream(struct kshark_context *kshark_ctx)
 {
-	int sd;
+	struct kshark_data_stream *stream;
 
-	for (sd = 0; sd < KS_MAX_NUM_STREAMS; ++sd)
-		if (!kshark_ctx->stream[sd])
-			break;
-
-	if (sd == KS_MAX_NUM_STREAMS)
+	if (kshark_ctx->n_streams == KS_MAX_NUM_STREAMS)
 		return -EMFILE;
 
-	kshark_ctx->stream[sd] = kshark_stream_alloc();
-	kshark_ctx->stream[sd]->stream_id = sd;
+	stream = kshark_stream_alloc();
+	stream->stream_id = kshark_ctx->n_streams;
 
-	return sd;
+	if (pthread_mutex_init(&stream->input_mutex, NULL) != 0) {
+		free(stream);
+		return -EAGAIN;
+	}
+
+	kshark_ctx->stream[kshark_ctx->n_streams++] = stream;
+
+	return stream->stream_id;
 }
 
 static bool is_tep(const char *filename)
@@ -252,11 +253,7 @@ int kshark_stream_open(struct kshark_data_stream *stream, const char *file)
 	if (!stream || !kshark_instance(&kshark_ctx))
 		return -EFAULT;
 
-	if (pthread_mutex_init(&stream->input_mutex, NULL) != 0)
-		return -EAGAIN;
-
 	stream->file = strdup(file);
-	stream->name = strdup(file);
 	set_format(kshark_ctx, stream, file);
 
 	switch (stream->format) {
@@ -1197,78 +1194,59 @@ void kshark_offset_calib(struct kshark_entry *e, int64_t *argv)
 	e->ts += argv[0];
 }
 
-static size_t copy_prior_data(struct kshark_entry **merged_data,
-			      struct kshark_entry **prior_data,
-			      size_t a_size,
-			      uint64_t t)
+static int first_in_time(struct kshark_data_set *buffer, int n_buffers, size_t *count)
 {
-	size_t mid, l = 0, h = a_size - 1;
+	int64_t t_min = INT64_MAX;
+	int i, min = -1;
 
-	/*
-	 * After executing the BSEARCH macro, "l" will be the index of the last
-	 * prior entry having timestamp < t  and "h" will be the index of the
-	 * first prior entry having timestamp >= t.
-	 */
-	BSEARCH(h, l, prior_data[mid]->ts < t);
+	for (i = 0; i < n_buffers; ++i) {
+		if (count[i] == buffer[i].n_rows)
+			continue;
 
-	/*
-	 * Copy all entries before "t" (in time).
-	 */
-	memcpy(merged_data, prior_data, h * sizeof(*prior_data));
+		if (t_min > buffer[i].data[count[i]]->ts) {
+			t_min = buffer[i].data[count[i]]->ts;
+			min = i;
+		}
+	}
 
-	return h;
+	return min;
 }
 
 /**
  * @brief Merge two trace data streams.
  *
- * @param data_a: Input location for the prior trace data.
- * @param a_size: The size of the prior trace data.
- * @param data_b: Input location for the trace data to be merged to
- *			   the prior.
- * @param b_size: The size of the associated trace data.
+ * @param buffers: Input location for the data-sets to be merged.
+ * @param n_buffers: The size of the associated trace data.
  *
  * @returns Merged and sorted in time trace data. The user is responsible for
  *	    freeing the elements of the outputted array.
  */
-struct kshark_entry **kshark_data_merge(struct kshark_entry **data_a,
-					size_t a_size,
-					struct kshark_entry **data_b,
-					size_t b_size)
+struct kshark_entry **kshark_data_merge(struct kshark_data_set *buffers,
+					int n_buffers)
 {
-	size_t i = 0, a_count = 0, b_count = 0;
-	size_t tot = a_size + b_size, cpy_size;
 	struct kshark_entry **merged_data;
+	size_t i, tot = 0, count[n_buffers];
+	int i_first;
+
+	if (n_buffers < 2) {
+		fputs("kshark_data_merge needs multipl data sets.\n", stderr);
+		return NULL;
+	}
+
+	for (i = 0; i < n_buffers; ++i) {
+		count[i] = 0;
+		if (buffers[i].n_rows > 0)
+			tot += buffers[i].n_rows;
+	}
 
 	merged_data = calloc(tot, sizeof(*merged_data));
-	if (data_a[0]->ts < data_b[0]->ts) {
-		i = a_count = copy_prior_data(merged_data, data_a,
-					      a_size, data_b[0]->ts);
-	} else {
-		i = b_count = copy_prior_data(merged_data, data_b,
-					      b_size, data_a[0]->ts);
+
+	for (i = 0; i < tot; ++i) {
+		i_first = first_in_time(buffers, n_buffers, count);
+		assert(i_first >= 0);
+		merged_data[i] = buffers[i_first].data[count[i_first]];
+		++count[i_first];
 	}
-
-	for (; i < tot; ++i) {
-		if (data_a[a_count]->ts <= data_b[b_count]->ts) {
-			merged_data[i] = data_a[a_count++];
-			if (a_count == a_size)
-				break;
-		} else {
-			merged_data[i] = data_b[b_count++];
-			if (b_count == b_size)
-				break;
-		}
-	}
-
-	/* Copy the remaining data. */
-	++i;
-	cpy_size = (tot - i) * sizeof(*merged_data);
-
-	if (a_count == a_size && b_count < b_size)
-		memcpy(&merged_data[i], &data_b[b_count], cpy_size);
-	else if (a_count < a_size && b_count == b_size)
-		memcpy(&merged_data[i], &data_a[a_count], cpy_size);
 
 	return merged_data;
 }
@@ -1330,6 +1308,59 @@ void kshark_set_clock_offset(struct kshark_context *kshark_ctx,
 	kshark_data_qsort(entries, size);
 }
 
+static ssize_t load_all_entries(struct kshark_context *kshark_ctx,
+				struct kshark_entry **loaded_rows,
+				ssize_t n_loaded,
+				int first_stream, int n_streams,
+				struct kshark_entry ***data_rows)
+{
+	int i, j = 0, n_data_sets;
+	ssize_t data_size = 0;
+
+	if (n_streams <= 0 || first_stream < 0)
+		return data_size;
+
+	n_data_sets = n_streams - first_stream;
+	if (loaded_rows && n_loaded > 0)
+		++n_data_sets;
+
+	struct kshark_data_set buffers[n_data_sets];
+	memset(buffers, 0, sizeof(buffers));
+
+	if (loaded_rows && n_loaded > 0) {
+		/* Add the data that is already loaded. */
+		data_size = buffers[n_data_sets - 1].n_rows = n_loaded;
+		buffers[n_data_sets - 1].data = loaded_rows;
+	}
+
+	/* Add the data of the new streams. */
+	for (i = first_stream; i < n_streams; ++i) {
+		buffers[j].data = NULL;
+		buffers[j].n_rows = kshark_load_entries(kshark_ctx, i,
+							&buffers[j].data);
+
+		if (buffers[j].n_rows < 0) {
+			data_size = buffers[j].n_rows;
+			goto error;
+		}
+
+		data_size += buffers[j++].n_rows;
+	}
+
+	if (n_data_sets == 1) {
+		*data_rows = buffers[0].data;
+	} else {
+		/* Merge all streams. */
+		*data_rows = kshark_data_merge(buffers, n_data_sets);
+	}
+
+ error:
+	for (i = 1; i < n_data_sets; ++i)
+		free(buffers[i].data);
+
+	return data_size;
+}
+
 /**
  * @brief Load the content of the all opened data file into an array of
  *	  kshark_entries.
@@ -1349,44 +1380,26 @@ void kshark_set_clock_offset(struct kshark_context *kshark_ctx,
 ssize_t kshark_load_all_entries(struct kshark_context *kshark_ctx,
 				struct kshark_entry ***data_rows)
 {
-	size_t data_size = 0;
-	int i, *stream_ids, sd;
-
-	if (!kshark_ctx->n_streams)
-		return data_size;
-
-	stream_ids = kshark_all_streams(kshark_ctx);
-	sd = stream_ids[0];
-
-	data_size = kshark_load_entries(kshark_ctx, sd, data_rows);
-
-	for (i = 1; i < kshark_ctx->n_streams; ++i) {
-		struct kshark_entry **stream_data_rows = NULL;
-		struct kshark_entry **merged_data_rows;
-		size_t stream_data_size;
-
-		sd = stream_ids[i];
-		stream_data_size = kshark_load_entries(kshark_ctx, sd,
-						       &stream_data_rows);
-
-		merged_data_rows =
-			kshark_data_merge(*data_rows, data_size,
-					  stream_data_rows, stream_data_size);
-
-		free(stream_data_rows);
-		free(*data_rows);
-
-		stream_data_rows = *data_rows = NULL;
-
-		*data_rows = merged_data_rows;
-		data_size += stream_data_size;
-	}
-
-	free(stream_ids);
-
-	return data_size;
+	return load_all_entries(kshark_ctx,
+				NULL, 0,
+				0,
+				kshark_ctx->n_streams,
+				data_rows);
 }
 
+ssize_t kshark_append_all_entries(struct kshark_context *kshark_ctx,
+				  struct kshark_entry **prior_data,
+				  ssize_t n_prior_rows,
+				  int first_streams,
+				  struct kshark_entry ***merged_data)
+{
+	return load_all_entries(kshark_ctx,
+				prior_data,
+				n_prior_rows,
+			        first_streams,
+				kshark_ctx->n_streams,
+				merged_data);
+}
 static inline void free_ptr(void *ptr)
 {
 	if (ptr)

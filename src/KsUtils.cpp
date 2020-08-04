@@ -432,6 +432,17 @@ QString taskPlotName(int sd, int pid)
 	return name;
 }
 
+QString streamDescription(kshark_data_stream *stream)
+{
+	QString descr(stream->file);
+	if (stream->name) {
+		descr += ":";
+		descr += stream->name;
+	}
+
+	return descr;
+}
+
 }; // KsUtils
 
 /** A stream operator for converting QColor into KsPlot::Color. */
@@ -470,7 +481,27 @@ int KsDataStore::_openDataFile(kshark_context *kshark_ctx,
 		return sd;
 	}
 
+	if (kshark_ctx->stream[sd]->format == KS_TEP_DATA)
+		kshark_tep_init_all_buffers(kshark_ctx, sd);
+
 	return sd;
+}
+
+void KsDataStore::_addPluginsToStream(kshark_context *kshark_ctx, int sd,
+				      QVector<kshark_dpi *> plugins)
+{
+	kshark_data_stream *stream;
+
+	stream = kshark_get_data_stream(kshark_ctx, sd);
+	if (!stream)
+		return;
+
+	for (auto const &p: plugins) {
+		struct kshark_dpi_list *plugin;
+
+		plugin = kshark_register_plugin_to_stream(stream, p, true);
+		kshark_handle_dpi(stream, plugin, KSHARK_PLUGIN_INIT);
+	}
 }
 
 /** Load trace data for file. */
@@ -478,9 +509,7 @@ int  KsDataStore::loadDataFile(const QString &file,
 			       QVector<kshark_dpi *> plugins)
 {
 	kshark_context *kshark_ctx(nullptr);
-	kshark_data_stream *stream;
-	ssize_t n;
-	int sd;
+	int sd, n_streams;
 
 	if (!kshark_instance(&kshark_ctx))
 		return -EFAULT;
@@ -493,21 +522,16 @@ int  KsDataStore::loadDataFile(const QString &file,
 	if (sd < 0)
 		return sd;
 
-	stream = kshark_ctx->stream[sd];
-	for (auto const &p: plugins) {
-		struct kshark_dpi_list *plugin;
+	n_streams = kshark_ctx->n_streams;
+	for (sd = 0; sd < n_streams; ++sd)
+		_addPluginsToStream(kshark_ctx, sd, plugins);
 
-		plugin = kshark_register_plugin_to_stream(stream, p, true);
-		kshark_handle_dpi(stream, plugin, KSHARK_PLUGIN_INIT);
-	}
-
-	n = kshark_load_entries(kshark_ctx, sd, &_rows);
-	if (n < 0) {
+	_dataSize = kshark_load_all_entries(kshark_ctx, &_rows);
+	if (_dataSize <= 0) {
 		kshark_close(kshark_ctx, sd);
-		return n;
+		return _dataSize;
 	}
 
-	_dataSize = n;
 	registerCPUCollections();
 
 	return sd;
@@ -524,10 +548,9 @@ int  KsDataStore::loadDataFile(const QString &file,
 int KsDataStore::appendDataFile(const QString &file, int64_t offset)
 {
 	kshark_context *kshark_ctx(nullptr);
-	struct kshark_entry **apndRows = nullptr;
 	struct kshark_entry **mergedRows;
-	ssize_t nApnd = 0;
-	int sd;
+	ssize_t nLoaded = _dataSize;
+	int i, sd;
 
 	if (!kshark_instance(&kshark_ctx))
 		return -EFAULT;
@@ -536,28 +559,27 @@ int KsDataStore::appendDataFile(const QString &file, int64_t offset)
 
 	sd = _openDataFile(kshark_ctx, file);
 
-	kshark_ctx->stream[sd]->calib = kshark_offset_calib;
-	kshark_ctx->stream[sd]->calib_array = (int64_t *) malloc(sizeof(int64_t));
-	*(kshark_ctx->stream[sd]->calib_array) = offset;
-	kshark_ctx->stream[sd]->calib_array_size = 1;
+	for (i = sd; i < kshark_ctx->n_streams; ++i) {
+		kshark_ctx->stream[sd]->calib = kshark_offset_calib;
+		kshark_ctx->stream[sd]->calib_array = (int64_t *) malloc(sizeof(int64_t));
+		*(kshark_ctx->stream[sd]->calib_array) = offset;
+		kshark_ctx->stream[sd]->calib_array_size = 1;
+	}
 
-	nApnd = kshark_load_entries(kshark_ctx, sd, &apndRows);
-	if (nApnd <= 0) {
+	_dataSize = kshark_append_all_entries(kshark_ctx, _rows, nLoaded, sd,
+					      &mergedRows);
+
+	if (_dataSize <= 0 || _dataSize == nLoaded) {
 		QErrorMessage *em = new QErrorMessage();
 		em->showMessage(QString("File %1 contains no data.").arg(file));
 		em->exec();
 
-		kshark_close(kshark_ctx, sd);
-		return nApnd;
+		for (i = sd; i < kshark_ctx->n_streams; ++i)
+			kshark_close(kshark_ctx, i);
+
+		return _dataSize;
 	}
 
-	mergedRows = kshark_data_merge(_rows, _dataSize,
-				       apndRows, nApnd);
-
-	free(_rows);
-	free(apndRows);
-
-	_dataSize += nApnd;
 	_rows = mergedRows;
 
 	registerCPUCollections();

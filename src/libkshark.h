@@ -739,10 +739,14 @@ kshark_get_entry_back(const struct kshark_entry_request *req,
 
 void kshark_offset_calib(struct kshark_entry *e, int64_t *atgv);
 
-struct kshark_entry **kshark_data_merge(struct kshark_entry **prior_data,
-					size_t prior_size,
-					struct kshark_entry **associated_data,
-					size_t associated_size);
+struct kshark_data_set {
+	struct kshark_entry **data;
+
+	ssize_t n_rows;
+};
+
+struct kshark_entry **kshark_data_merge(struct kshark_data_set *buffer,
+					int n_buffers);
 
 void kshark_set_clock_offset(struct kshark_context *kshark_ctx,
 			     struct kshark_entry **entries, size_t size,
@@ -751,6 +755,11 @@ void kshark_set_clock_offset(struct kshark_context *kshark_ctx,
 ssize_t kshark_load_all_entries(struct kshark_context *kshark_ctx,
 				struct kshark_entry ***data_rows);
 
+ssize_t kshark_append_all_entries(struct kshark_context *kshark_ctx,
+				  struct kshark_entry **prior_data,
+				  ssize_t n_prior_rows,
+				  int first_streams,
+				  struct kshark_entry ***merged_data);
 /**
  * Data collections are used to optimize the search for an entry having an
  * abstract property, defined by a Matching condition function and an array of
@@ -1008,7 +1017,7 @@ bool kshark_config_doc_get(struct kshark_config_doc *conf,
 struct kshark_trace_histo;
 
 struct kshark_config_doc *
-kshark_export_trace_file(const char *file,
+kshark_export_trace_file(const char *file, const char *name,
 			 enum kshark_config_formats format);
 
 int kshark_import_trace_file(struct kshark_context *kshark_ctx,

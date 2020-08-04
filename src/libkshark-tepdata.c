@@ -1086,14 +1086,6 @@ static void kshark_tep_init_methods(struct kshark_data_stream *stream)
 	stream->interface.load_matrix = tepdata_load_matrix;
 }
 
-const char *tep_plugin_names[] = {
-	"sched_events",
-	"missed_events",
-	"kvm_combo",
-};
-
-#define LINUX_IDLE_TASK_PID	0
-
 /** Find a host stream from the same tracing session, that has guest information */
 static struct tracecmd_input *
 kshark_tep_find_merge_peer(struct kshark_context *kshark_ctx,
@@ -1113,13 +1105,16 @@ kshark_tep_find_merge_peer(struct kshark_context *kshark_ctx,
 	stream_ids = kshark_all_streams(kshark_ctx);
 	if (!stream_ids)
 		goto out;
-	for (i = 0; i < kshark_ctx->n_streams; i++) {
+
+	for (i = 0; i < kshark_ctx->n_streams - 1; i++) {
 		peer_stream = kshark_get_data_stream(kshark_ctx, stream_ids[i]);
 		if (!peer_stream || peer_stream->format != KS_TEP_DATA)
 			continue;
+
 		peer_handle = kshark_get_tep_input(peer_stream);
 		if (!peer_handle)
 			continue;
+
 		ret = tracecmd_get_guest_cpumap(peer_handle, trace_id,
 						NULL, NULL, NULL);
 		if (!ret)
@@ -1134,56 +1129,51 @@ out:
 	return peer_handle;
 }
 
-/** Initialize the FTRACE data input (from file). */
-int kshark_tep_init_input(struct kshark_data_stream *stream,
-			  const char *file)
+const char *tep_plugin_names[] = {
+	"sched_events",
+	"missed_events",
+	"kvm_combo",
+};
+
+#define LINUX_IDLE_TASK_PID	0
+
+static int kshark_tep_handle_plugins(struct kshark_context *kshark_ctx,
+				     struct kshark_data_stream *stream)
 {
-	struct kshark_context *kshark_ctx = NULL;
-	struct tepdata_handle *tep_handle;
+	int i, n_tep_plugins = sizeof(tep_plugin_names) / sizeof (const char *);
 	struct kshark_plugin_list *plugin;
-	struct tracecmd_input *merge_peer;
+
+	for (i = 0; i < n_tep_plugins; ++i) {
+		plugin = kshark_find_plugin_by_name(kshark_ctx->plugins,
+						    tep_plugin_names[i]);
+
+		if (plugin && plugin->process_interface) {
+			kshark_register_plugin_to_stream(stream,
+							 plugin->process_interface,
+							 true);
+		} else {
+			fprintf(stderr, "Plugin \"%s\" not found.\n",
+				tep_plugin_names[i]);
+		}
+	}
+
+	return kshark_handle_all_dpis(stream, KSHARK_PLUGIN_INIT);
+}
+
+static int kshark_tep_stream_init(struct kshark_data_stream *stream,
+				  struct tracecmd_input *input)
+{
+	struct tepdata_handle *tep_handle;
 	struct tep_event *event;
-	int i, n_tep_plugins;
-	int ret;
-
-	if (!kshark_instance(&kshark_ctx) || !init_thread_seq())
-		return -EEXIST;
-
-	/*
-	 * Turn off function trace indent and turn on show parent
-	 * if possible.
-	 */
-	tep_plugin_add_option("ftrace:parent", "1");
-	tep_plugin_add_option("ftrace:indent", "0");
 
 	tep_handle = calloc(1, sizeof(*tep_handle));
 	if (!tep_handle)
-		return -EFAULT;
+		goto fail;
 
-	/** Open the tracing file, parse headers and create trace input context */
-	tep_handle->input = tracecmd_open_head(file);
-	if (!tep_handle->input) {
-		free(tep_handle);
-		stream->interface.handle = NULL;
-		return -EEXIST;
-	}
-
-	/** Find a merge peer from the same tracing session */
-	merge_peer = kshark_tep_find_merge_peer(kshark_ctx, tep_handle->input);
-	if (merge_peer)
-		tracecmd_pair_peer(tep_handle->input, merge_peer);
-
-	/** Read the racing data from the file */
-	ret = tracecmd_init_data(tep_handle->input);
-
-	if (ret < 0) {
-		tracecmd_close(tep_handle->input);
-		free(tep_handle);
-		stream->interface.handle = NULL;
-		return -EEXIST;
-	}
-
+	tep_handle->input = input;
 	tep_handle->tep = tracecmd_get_pevent(tep_handle->input);
+	if (!tep_handle->tep)
+		goto fail;
 
 	tep_handle->sched_switch_event_id = -EINVAL;
 	event = tep_find_event_by_name(tep_handle->tep,
@@ -1205,27 +1195,196 @@ int kshark_tep_init_input(struct kshark_data_stream *stream,
 	tep_handle->advanced_event_filter =
 		tep_filter_alloc(tep_handle->tep);
 
-	stream->interface.handle = tep_handle;
 	kshark_tep_init_methods(stream);
 
-	n_tep_plugins = sizeof(tep_plugin_names) / sizeof (const char *);
-	for (i = 0; i < n_tep_plugins; ++i) {
-		plugin = kshark_find_plugin_by_name(kshark_ctx->plugins,
-						    tep_plugin_names[i]);
+	stream->interface.handle = tep_handle;
 
-		if (plugin && plugin->process_interface) {
-			kshark_register_plugin_to_stream(stream,
-							 plugin->process_interface,
-							 true);
-		} else {
-			fprintf(stderr, "Plugin \"%s\" not found.\n",
-				tep_plugin_names[i]);
+	return 0;
+
+ fail:
+	free(tep_handle);
+	stream->interface.handle = NULL;
+	return -EFAULT;
+}
+
+static struct tracecmd_input *get_top_input(struct kshark_context *kshark_ctx,
+					    int sd)
+{
+	struct kshark_data_stream *top_stream;
+
+	top_stream = kshark_get_data_stream(kshark_ctx, sd);
+	if (!top_stream)
+		return NULL;
+
+	return kshark_get_tep_input(top_stream);
+}
+
+char **kshark_tep_get_buffer_names(struct kshark_context *kshark_ctx, int sd,
+				   int *n_buffers)
+{
+	struct tracecmd_input *top_input;
+	char **buffer_names;
+	int i, n;
+
+	top_input = get_top_input(kshark_ctx, sd);
+	if (!top_input)
+		return NULL;
+
+	n = tracecmd_buffer_instances(top_input);
+	buffer_names = malloc(n * sizeof(char *));
+
+	for (i = 0; i < n; ++i)
+		buffer_names[i] =
+			strdup(tracecmd_buffer_instance_name(top_input, i));
+
+	*n_buffers = n;
+	return buffer_names;
+}
+
+static void set_stream_fields(struct tracecmd_input *top_input, int i,
+			      const char *file,
+			      const char *name,
+			      struct kshark_data_stream *buffer_stream,
+			      struct tracecmd_input **buffer_input)
+{
+	*buffer_input = tracecmd_buffer_instance_handle(top_input, i);
+
+	buffer_stream->name = strdup(name);
+	buffer_stream->file = strdup(file);
+	buffer_stream->format = KS_TEP_DATA;
+}
+
+int kshark_tep_open_buffer(struct kshark_context *kshark_ctx, int sd,
+			   const char *buffer_name)
+{
+	struct kshark_data_stream *top_stream, *buffer_stream;
+	struct tracecmd_input *top_input, *buffer_input;
+	int i, sd_buffer, n_buffers, ret = -ENODATA;
+	char **names;
+
+	top_stream = kshark_get_data_stream(kshark_ctx, sd);
+	if (!top_stream)
+		return -EFAULT;
+
+	top_input = kshark_get_tep_input(top_stream);
+	if (!top_input)
+		return -EFAULT;
+
+	names = kshark_tep_get_buffer_names(kshark_ctx, sd, &n_buffers);
+
+	sd_buffer = kshark_add_stream(kshark_ctx);
+	buffer_stream = kshark_get_data_stream(kshark_ctx, sd_buffer);
+	if (!buffer_stream)
+		return -EFAULT;
+
+	for (i = 0; i < n_buffers; ++i) {
+		if (strcmp(buffer_name, names[i]) != 0) {
+			set_stream_fields(top_input, i,
+					  top_stream->file,
+					  buffer_name,
+					  buffer_stream,
+					  &buffer_input);
+
+			ret = kshark_tep_stream_init(buffer_stream,
+						     buffer_input);
+			if (ret == 0)
+				kshark_tep_handle_plugins(kshark_ctx,
+							  buffer_stream);
+
+			break;
 		}
 	}
 
-	kshark_handle_all_dpis(stream, KSHARK_PLUGIN_INIT);
+	for (i = 0; i < n_buffers; ++i)
+		free(names[i]);
+	free(names);
+
+	return (ret < 0)? ret : buffer_stream->stream_id;
+}
+
+int kshark_tep_init_all_buffers(struct kshark_context *kshark_ctx,
+				int sd)
+{
+	struct kshark_data_stream *top_stream, *buffer_stream;
+	struct tracecmd_input *buffer_input;
+	struct tracecmd_input *top_input;
+	int i, n_buffers, sd_buffer, ret;
+
+	top_stream = kshark_get_data_stream(kshark_ctx, sd);
+	if (!top_stream)
+		return -EFAULT;
+
+	top_input = kshark_get_tep_input(top_stream);
+	if (!top_input)
+		return -EFAULT;
+
+	n_buffers = tracecmd_buffer_instances(top_input);
+	for (i = 0; i < n_buffers; ++i) {
+		sd_buffer = kshark_add_stream(kshark_ctx);
+		if (sd_buffer < 0)
+			return -EFAULT;
+
+		buffer_stream = kshark_ctx->stream[sd_buffer];
+
+		set_stream_fields(top_input, i,
+				  top_stream->file,
+				  tracecmd_buffer_instance_name(top_input, i),
+				  buffer_stream,
+				  &buffer_input);
+
+		ret = kshark_tep_stream_init(buffer_stream, buffer_input);
+		if (ret != 0)
+			return -EFAULT;
+
+		kshark_tep_handle_plugins(kshark_ctx, buffer_stream);
+	}
+
+	return n_buffers;
+}
+
+/** Initialize the FTRACE data input (from file). */
+int kshark_tep_init_input(struct kshark_data_stream *stream,
+			  const char *file)
+{
+	struct kshark_context *kshark_ctx = NULL;
+	struct tracecmd_input *merge_peer;
+	struct tracecmd_input *input;
+
+	if (!kshark_instance(&kshark_ctx) || !init_thread_seq())
+		return -EEXIST;
+
+	/*
+	 * Turn off function trace indent and turn on show parent
+	 * if possible.
+	 */
+	tep_plugin_add_option("ftrace:parent", "1");
+	tep_plugin_add_option("ftrace:indent", "0");
+
+	input = tracecmd_open_head(file);
+	if (!input)
+		return -EEXIST;
+
+	/* Find a merge peer from the same tracing session. */
+	merge_peer = kshark_tep_find_merge_peer(kshark_ctx, input);
+	if (merge_peer)
+		tracecmd_pair_peer(input, merge_peer);
+
+	/* Read the tracing data from the file. */
+	if (tracecmd_init_data(input) < 0)
+		goto fail;
+
+	/* Initialize the stream asociated with the main buffer. */
+	if (kshark_tep_stream_init(stream, input) < 0)
+		goto fail;
+
+	stream->name = strdup("top");
+	kshark_tep_handle_plugins(kshark_ctx, stream);
 
 	return 0;
+
+ fail:
+	tracecmd_close(input);
+	return -EFAULT;
 }
 
 /** Initialize using the locally available tracing events. */
@@ -1477,4 +1636,23 @@ mem_error:
 	}
 
 	return -ENOMEM;
+}
+
+struct kshark_data_stream *
+kshark_tep_find_top_stream(struct kshark_context *kshark_ctx,
+			   const char *file)
+{
+	struct kshark_data_stream *top_stream = NULL, *stream;
+	int i, *stream_ids = kshark_all_streams(kshark_ctx);
+
+	for (i = 0; i < kshark_ctx->n_streams; ++i) {
+		stream = kshark_ctx->stream[stream_ids[i]];
+		if (strcmp(stream->file, file) == 0 &&
+		    strcmp(stream->name, "top") == 0)
+			top_stream = stream;
+	}
+
+	free(stream_ids);
+
+	return top_stream;
 }

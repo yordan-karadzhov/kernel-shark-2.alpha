@@ -41,7 +41,7 @@ public:
 
 	void exportToFile(QString jfileName);
 
-	void saveDataFile(QString fileName);
+	void saveDataFile(QString fileName, QString dataSetName);
 
 	QString getDataFile(kshark_context *kshark_ctx);
 

@@ -860,6 +860,9 @@ kshark_add_collection_to_list(struct kshark_context *kshark_ctx,
 {
 	struct kshark_entry_collection *col;
 
+	if (!data || n_rows == 0)
+		return NULL;
+
 	col = kshark_data_collection_alloc(kshark_ctx, data,
 					   0, n_rows,
 					   cond, sd,

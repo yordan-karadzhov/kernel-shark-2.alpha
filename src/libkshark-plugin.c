@@ -582,8 +582,9 @@ static void plugin_init(struct kshark_data_stream *stream,
 		plugin->status |= KSHARK_PLUGIN_LOADED;
 	} else {
 		fprintf(stderr,
-			"plugin \"%s\" failed to initialize on stream %s\n",
+			"plugin \"%s\" failed to initialize on stream %s:%s\n",
 			plugin->interface->name,
+			stream->file,
 			stream->name);
 
 		plugin->status |= KSHARK_PLUGIN_FAILED;

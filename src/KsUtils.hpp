@@ -162,6 +162,8 @@ inline int getNStreams()
 	return kshark_ctx->n_streams;
 }
 
+QString streamDescription(kshark_data_stream *stream);
+
 }; // KsUtils
 
 /** Identifier of the Dual Marker active state. */
@@ -242,6 +244,9 @@ private:
 	void _freeData();
 
 	void _applyIdFilter(int filterId, QVector<int> vec, int sd);
+
+	void _addPluginsToStream(kshark_context *kshark_ctx, int sd,
+				 QVector<kshark_dpi *> plugins);
 };
 
 typedef QMap<int, QVector<int>> KsPluginMap;

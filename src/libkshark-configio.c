@@ -447,10 +447,10 @@ bool kshark_type_check(struct kshark_config_doc *conf, const char *type)
 	}
 }
 
-static bool kshark_trace_file_to_json(const char *file,
+static bool kshark_trace_file_to_json(const char *file, const char *name,
 				      struct json_object *jobj)
 {
-	struct json_object *jfile_name, *jtime;
+	struct json_object *jfile_name, *jbuffer_name, *jtime;
 	char abs_path[FILENAME_MAX];
 	struct stat st;
 
@@ -469,12 +469,14 @@ static bool kshark_trace_file_to_json(const char *file,
 	}
 
 	jfile_name = json_object_new_string(abs_path);
+	jbuffer_name = json_object_new_string(name);
 	jtime = json_object_new_int64(st.st_mtime);
 
 	if (!jfile_name || !jtime)
 		goto fail;
 
 	json_object_object_add(jobj, "file", jfile_name);
+	json_object_object_add(jobj, "name", jbuffer_name);
 	json_object_object_add(jobj, "time", jtime);
 
 	return true;
@@ -493,6 +495,7 @@ static bool kshark_trace_file_to_json(const char *file,
  *	  Configuration document.
  *
  * @param file: The name of the file.
+ * @param name: The name of the data buffer.
  * @param format: Input location for the Configuration format identifier.
  *		  Currently only Json format is supported.
  *
@@ -500,7 +503,7 @@ static bool kshark_trace_file_to_json(const char *file,
  *	    kshark_free_config_doc() to free the object.
  */
 struct kshark_config_doc *
-kshark_export_trace_file(const char *file,
+kshark_export_trace_file(const char *file, const char *name,
 			 enum kshark_config_formats format)
 {
 	/*  Create a new Configuration document. */
@@ -512,7 +515,7 @@ kshark_export_trace_file(const char *file,
 
 	switch (format) {
 	case KS_CONFIG_JSON:
-		kshark_trace_file_to_json(file, conf->conf_doc);
+		kshark_trace_file_to_json(file, name, conf->conf_doc);
 		return conf;
 
 	default:
@@ -522,11 +525,12 @@ kshark_export_trace_file(const char *file,
 	}
 }
 
-static bool kshark_trace_file_from_json(const char **file, const char *type,
+static bool kshark_trace_file_from_json(const char **file, const char **name,
+					const char *type,
 					struct json_object *jobj)
 {
-	struct json_object *jfile_name, *jtime;
-	const char *file_str;
+	struct json_object *jfile_name, *jbuffer_name, *jtime;
+	const char *file_str, *name_str;
 	struct stat st;
 	char *header;
 	int64_t time;
@@ -543,6 +547,7 @@ static bool kshark_trace_file_from_json(const char **file, const char *type,
 
 	if (!type_OK ||
 	    !json_object_object_get_ex(jobj, "file", &jfile_name) ||
+	    !json_object_object_get_ex(jobj, "name", &jbuffer_name) ||
 	    !json_object_object_get_ex(jobj, "time", &jtime)) {
 		fprintf(stderr,
 			"Failed to retrieve data file from json_object.\n");
@@ -550,6 +555,7 @@ static bool kshark_trace_file_from_json(const char **file, const char *type,
 	}
 
 	file_str = json_object_get_string(jfile_name);
+	name_str = json_object_get_string(jbuffer_name);
 	time = json_object_get_int64(jtime);
 
 	if (stat(file_str, &st) != 0) {
@@ -564,6 +570,7 @@ static bool kshark_trace_file_from_json(const char **file, const char *type,
 	}
 
 	*file = file_str;
+	*name = name_str;
 
 	return true;
 }
@@ -584,12 +591,27 @@ static bool kshark_trace_file_from_json(const char **file, const char *type,
 int kshark_import_trace_file(struct kshark_context *kshark_ctx,
 			     struct kshark_config_doc *conf)
 {
-	const char *file = NULL;
+	const char *file = NULL, *name = NULL;
 	int sd = -1;
+
 	switch (conf->format) {
 	case KS_CONFIG_JSON:
-		if (kshark_trace_file_from_json(&file, "data", conf->conf_doc))
-			sd = kshark_open(kshark_ctx, file);
+		if (kshark_trace_file_from_json(&file, &name, "data",
+						conf->conf_doc)) {
+			if (strcmp(name, "top") == 0) {
+				sd = kshark_open(kshark_ctx, file);
+			} else {
+				struct kshark_data_stream *top_stream;
+
+				top_stream =
+					kshark_tep_find_top_stream(kshark_ctx,
+								   file);
+
+				sd = kshark_tep_open_buffer(kshark_ctx,
+							    top_stream->stream_id,
+							    name);
+			}
+		}
 
 		break;
 
@@ -607,7 +629,8 @@ static bool kshark_plugin_to_json(struct kshark_plugin_list *plugin,
 {
 	struct json_object *jname = json_object_new_string(plugin->name);
 
-	if (!kshark_trace_file_to_json(plugin->file, jobj) || !jname) {
+	if (!kshark_trace_file_to_json(plugin->file, plugin->name, jobj) ||
+	    !jname) {
 		json_object_put(jname);
 		return false;
 	}
@@ -662,7 +685,7 @@ static bool kshark_all_plugins_to_json(struct kshark_context *kshark_ctx,
 
 	while (plugin) {
 		jfile = json_object_new_object();
-		if (!kshark_trace_file_to_json(plugin->file, jfile))
+		if (!kshark_trace_file_to_json(plugin->file, plugin->name, jfile))
 			goto fail;
 
 		json_object_array_add(jlist, jfile);
@@ -716,26 +739,16 @@ kshark_export_all_plugins(struct kshark_context *kshark_ctx,
 static bool kshark_plugin_from_json(struct kshark_context *kshark_ctx,
 				    struct json_object *jobj)
 {
-	struct json_object *jname;
 	const char *file, *name;
 
-	if (!kshark_trace_file_from_json(&file, NULL, jobj) ||
-	    !json_object_object_get_ex(jobj, "name", &jname)) {
+	if (!kshark_trace_file_from_json(&file, &name, NULL, jobj)) {
 		fprintf(stderr, "Failed to import plugin!\n");
 		return false;
 	}
 
-	name = json_object_get_string(jname);
-	if (!name)
-		goto fail;
-
 	kshark_register_plugin(kshark_ctx, name, file);
 
 	return true;
-
- fail:
-	json_object_put(jname);
-	return false;
 }
 
 static bool kshark_all_plugins_from_json(struct kshark_context *kshark_ctx,
@@ -2108,7 +2121,7 @@ kshark_export_dstream(struct kshark_context *kshark_ctx, int sd,
 	sd_conf->conf_doc = json_object_new_int(sd);
 
 	filter_conf = kshark_export_all_filters(kshark_ctx, sd, format);
-	file_conf = kshark_export_trace_file(stream->file, format);
+	file_conf = kshark_export_trace_file(stream->file, stream->name, format);
 	plg_conf = kshark_export_stream_plugins(stream, format);
 
 	if (!sd_conf || !dstream_conf || !filter_conf || !file_conf)

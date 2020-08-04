@@ -192,6 +192,8 @@ private:
 	// Status bar.
 	KsWidgetsLib::KsWorkInProgress	_workInProgress;
 
+	bool	_updateSessionSize;
+
 	void _load(const QString& fileName, bool append);
 
 	void _open();

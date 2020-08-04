@@ -236,6 +236,7 @@ void KsComboPlotDialog::update()
 {
 	kshark_context *kshark_ctx(nullptr);
 	KsPlot::ColorTable colTable;
+	QString streamName;
 	QColor color;
 	int ret, sd, i;
 
@@ -251,11 +252,13 @@ void KsComboPlotDialog::update()
 		QMessageBox msgBox;
 		msgBox.critical(nullptr, "Error", err);
 		return;
-	} else
+	} else {
 		_guestMapCount = ret;
+	}
 
+	streamName = KsUtils::streamDescription(kshark_ctx->stream[_guestMap[0].host_id]);
 	KsUtils::setElidedText(&_hostFileLabel,
-			       kshark_ctx->stream[_guestMap[0].host_id]->name,
+			       streamName,
 			       Qt::ElideLeft, LABEL_WIDTH);
 
 	_guestStreamComboBox.clear();
@@ -265,7 +268,8 @@ void KsComboPlotDialog::update()
 		if (sd >= kshark_ctx->n_streams)
 			continue;
 
-		_guestStreamComboBox.addItem(kshark_ctx->stream[sd]->name, sd);
+		streamName = KsUtils::streamDescription(kshark_ctx->stream[sd]);
+		_guestStreamComboBox.addItem(streamName);
 		color << colTable[sd];
 		_guestStreamComboBox.setItemData(i, QBrush(color),
 						    Qt::BackgroundRole);

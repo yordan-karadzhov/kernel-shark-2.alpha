@@ -79,10 +79,11 @@ void KsSession::loadVisModel(KsGraphModel *model)
 }
 
 /** Save the trace data file. */
-void KsSession::saveDataFile(QString fileName)
+void KsSession::saveDataFile(QString fileName, QString dataSetName)
 {
 	kshark_config_doc *file =
 		kshark_export_trace_file(fileName.toStdString().c_str(),
+					 dataSetName.toStdString().c_str(),
 					 KS_CONFIG_JSON);
 
 	kshark_config_doc_add(_config, "Data", file);

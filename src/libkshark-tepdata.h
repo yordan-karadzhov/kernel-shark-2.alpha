@@ -73,7 +73,20 @@ struct kshark_host_guest_map {
 };
 
 void kshark_tracecmd_free_hostguest_map(struct kshark_host_guest_map *map, int count);
+
 int kshark_tracecmd_get_hostguest_mapping(struct kshark_host_guest_map **map);
+
+char **kshark_tep_get_buffer_names(struct kshark_context *kshark_ctx, int sd,
+				   int *n_buffers);
+
+int kshark_tep_open_buffer(struct kshark_context *kshark_ctx, int sd,
+			   const char *buffer_name);
+
+int kshark_tep_init_all_buffers(struct kshark_context *kshark_ctx, int sd);
+
+struct kshark_data_stream *
+kshark_tep_find_top_stream(struct kshark_context *kshark_ctx,
+			   const char *file);
 
 #ifdef __cplusplus
 }

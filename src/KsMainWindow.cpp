@@ -73,7 +73,8 @@ KsMainWindow::KsMainWindow(QWidget *parent)
   _bugReportAction("Report a bug", this),
   _deselectShortcut(this),
   _settings("kernelshark.org", "Kernel Shark"), // organization , application
-  _workInProgress(this)
+  _workInProgress(this),
+  _updateSessionSize(true)
 {
 	setWindowTitle("Kernel Shark");
 	_createActions();
@@ -210,8 +211,10 @@ void KsMainWindow::resizeEvent(QResizeEvent* event)
 {
 	QMainWindow::resizeEvent(event);
 
-	_session.saveMainWindowSize(*this);
-	_session.saveSplitterSize(_splitter);
+	if (_updateSessionSize) {
+		_session.saveMainWindowSize(*this);
+		_session.saveSplitterSize(_splitter);
+	}
 }
 
 void KsMainWindow::_createActions()
@@ -1397,6 +1400,7 @@ void KsMainWindow::loadSession(const QString &fileName)
 	KsWidgetsLib::KsProgressBar pb("Loading session settings ...");
 	pb.setValue(10);
 
+	_updateSessionSize = false;
 	if (!_session.importFromFile(fileName)) {
 		QString text("Unable to open session description file ");
 
@@ -1444,7 +1448,7 @@ void KsMainWindow::loadSession(const QString &fileName)
 
 	_session.loadSplitterSize(&_splitter);
 	_session.loadMainWindowSize(this);
-	this->show();
+	_updateSessionSize = true;
 	pb.setValue(180);
 
 	_session.loadDualMarker(&_mState, &_graph);

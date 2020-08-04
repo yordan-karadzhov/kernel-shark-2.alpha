@@ -211,6 +211,13 @@ KsTimeOffsetDialog::KsTimeOffsetDialog(QWidget *parent)
 		if (!stream)
 			return;
 
+		if (!stream->calib_array) {
+			stream->calib = kshark_offset_calib;
+			stream->calib_array =
+				(int64_t *) calloc(1, sizeof(int64_t));
+			stream->calib_array_size = 1;
+		}
+
 		offset = stream->calib_array[0] * 1e-3;
 		_input.setDoubleValue(offset);
 	};
@@ -325,7 +332,7 @@ void KsCheckBoxWidget::_setStream(uint8_t sd)
 	if (!stream)
 		return;
 
-	_streamName = QString(stream->name);
+	_streamName = KsUtils::streamDescription(stream);
 
 	KsUtils::setElidedText(&_stramLabel, _streamName,
 			       Qt::ElideLeft, width());
@@ -1148,7 +1155,7 @@ KsDStreamCheckBoxWidget::KsDStreamCheckBoxWidget(QWidget *parent)
 
 	for (int i = 0; i < nStreams; ++i) {
 		stream = kshark_ctx->stream[streamIds[i]];
-		QString name(stream->name);
+		QString name = KsUtils::streamDescription(stream);
 		if (name < 40) {
 			nameItem = new QTableWidgetItem(name);
 		} else {
@@ -1235,7 +1242,7 @@ void KsEventFieldSelectWidget::setStreamCombo()
 		sd = streamIds[i];
 		stream = kshark_ctx->stream[sd];
 		if (_streamComboBox.findData(sd) < 0)
-			_streamComboBox.addItem(QString(stream->name), sd);
+			_streamComboBox.addItem(KsUtils::streamDescription(stream), sd);
 	}
 	free(streamIds);
 }
