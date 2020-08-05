@@ -68,7 +68,7 @@ if (OPENGL_FOUND AND GLUT_FOUND)
 
 endif (OPENGL_FOUND AND GLUT_FOUND)
 
-if (Qt5Widgets_FOUND AND Qt5Network_FOUND)
+if (Qt5Widgets_FOUND AND Qt5Network_FOUND AND NOT _LIBS)
 
     message(STATUS "libkshark-gui")
     set (ks-guiLib_hdr  KsUtils.hpp
@@ -136,9 +136,9 @@ if (Qt5Widgets_FOUND AND Qt5Network_FOUND)
     install(PROGRAMS "${KS_DIR}/bin/kshark-su-record"
             DESTINATION ${_INSTALL_PREFIX}/bin/)
 
-endif (Qt5Widgets_FOUND AND Qt5Network_FOUND)
+    add_subdirectory(plugins)
 
-add_subdirectory(plugins)
+endif (Qt5Widgets_FOUND AND Qt5Network_FOUND AND NOT _LIBS)
 
 find_program(DO_AS_ROOT pkexec)
 

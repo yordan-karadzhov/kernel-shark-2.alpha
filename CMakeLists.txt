@@ -79,6 +79,12 @@ else (CMAKE_BUILD_TYPE MATCHES Package)
 
 endif (CMAKE_BUILD_TYPE MATCHES Package)
 
+if (_RPATH_TO_ORIGIN)
+
+    set(CMAKE_INSTALL_RPATH $ORIGIN)
+
+endif (_RPATH_TO_ORIGIN)
+
 include_directories(${KS_DIR}/src/
                     ${KS_DIR}/build/src/
                     ${JSONC_INCLUDE_DIR}
@@ -92,7 +98,6 @@ message(STATUS "CXX flags    : " ${CMAKE_CXX_FLAGS})
 message(STATUS "Linker flags : " ${CMAKE_EXE_LINKER_FLAGS})
 
 add_subdirectory(${KS_DIR}/src)
-add_subdirectory(${KS_DIR}/examples)
 
 if (_DOXYGEN_DOC AND DOXYGEN_FOUND)
 
@@ -107,12 +112,18 @@ if (_DOXYGEN_DOC AND DOXYGEN_FOUND)
                              "${KS_DIR}/Documentation/doxygen/html"
                              "${KS_DIR}/Documentation/doxygen/latex")
 
-endif ()
+endif (_DOXYGEN_DOC AND DOXYGEN_FOUND)
 
-configure_file( ${KS_DIR}/build/ks.desktop.cmake
-                ${KS_DIR}/${KS_APP_NAME}.desktop)
+if (NOT _LIBS)
 
-configure_file( ${KS_DIR}/build/org.freedesktop.kshark-record.policy.cmake
-                ${KS_DIR}/org.freedesktop.kshark-record.policy)
+    add_subdirectory(${KS_DIR}/examples)
+
+    configure_file(${KS_DIR}/build/ks.desktop.cmake
+                   ${KS_DIR}/${KS_APP_NAME}.desktop)
+
+    configure_file(${KS_DIR}/build/org.freedesktop.kshark-record.policy.cmake
+                   ${KS_DIR}/org.freedesktop.kshark-record.policy)
+
+endif (NOT _LIBS)
 
 message("")
