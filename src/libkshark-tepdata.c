@@ -451,11 +451,11 @@ static ssize_t tepdata_load_matrix(struct kshark_data_stream *stream,
 	if (total < 0)
 		goto fail;
 
-	status = data_matrix_alloc(total, cpu_array,
-					  pid_array,
-					  event_array,
-					  offset_array,
-					  ts_array);
+	status = kshark_data_matrix_alloc(total, cpu_array,
+						 pid_array,
+						 event_array,
+						 offset_array,
+						 ts_array);
 	if (!status)
 		goto fail_free;
 
@@ -473,8 +473,10 @@ static ssize_t tepdata_load_matrix(struct kshark_data_stream *stream,
 			if (cpu_array)
 				(*cpu_array)[count] = e->cpu;
 
-			if (ts_array)
+			if (ts_array) {
+				kshark_calib_entry(stream, e);
 				(*ts_array)[count] = e->ts;
+			}
 
 			if (pid_array)
 				(*pid_array)[count] = e->pid;
@@ -1059,13 +1061,6 @@ int tepdata_read_event_field(struct kshark_data_stream *stream,
 	return ret;
 }
 
-int tepdata_get_event_field_type(struct kshark_data_stream *stream,
-				 const struct kshark_entry *entry,
-				 const char *field)
-{
-	return 0;
-}
-
 /** Initialize all methods used by a stream of FTRACE data. */
 static void kshark_tep_init_methods(struct kshark_data_stream *stream)
 {
@@ -1137,11 +1132,15 @@ const char *tep_plugin_names[] = {
 
 #define LINUX_IDLE_TASK_PID	0
 
-static int kshark_tep_handle_plugins(struct kshark_context *kshark_ctx,
-				     struct kshark_data_stream *stream)
+int kshark_tep_handle_plugins(struct kshark_context *kshark_ctx, int sd)
 {
 	int i, n_tep_plugins = sizeof(tep_plugin_names) / sizeof (const char *);
 	struct kshark_plugin_list *plugin;
+	struct kshark_data_stream *stream;
+
+	stream = kshark_get_data_stream(kshark_ctx, sd);
+	if (!stream)
+		return -EEXIST;
 
 	for (i = 0; i < n_tep_plugins; ++i) {
 		plugin = kshark_find_plugin_by_name(kshark_ctx->plugins,
@@ -1278,7 +1277,7 @@ int kshark_tep_open_buffer(struct kshark_context *kshark_ctx, int sd,
 		return -EFAULT;
 
 	for (i = 0; i < n_buffers; ++i) {
-		if (strcmp(buffer_name, names[i]) != 0) {
+		if (strcmp(buffer_name, names[i]) == 0) {
 			set_stream_fields(top_input, i,
 					  top_stream->file,
 					  buffer_name,
@@ -1287,10 +1286,6 @@ int kshark_tep_open_buffer(struct kshark_context *kshark_ctx, int sd,
 
 			ret = kshark_tep_stream_init(buffer_stream,
 						     buffer_input);
-			if (ret == 0)
-				kshark_tep_handle_plugins(kshark_ctx,
-							  buffer_stream);
-
 			break;
 		}
 	}
@@ -1335,8 +1330,6 @@ int kshark_tep_init_all_buffers(struct kshark_context *kshark_ctx,
 		ret = kshark_tep_stream_init(buffer_stream, buffer_input);
 		if (ret != 0)
 			return -EFAULT;
-
-		kshark_tep_handle_plugins(kshark_ctx, buffer_stream);
 	}
 
 	return n_buffers;
@@ -1378,7 +1371,6 @@ int kshark_tep_init_input(struct kshark_data_stream *stream,
 		goto fail;
 
 	stream->name = strdup("top");
-	kshark_tep_handle_plugins(kshark_ctx, stream);
 
 	return 0;
 
@@ -1638,9 +1630,8 @@ mem_error:
 	return -ENOMEM;
 }
 
-struct kshark_data_stream *
-kshark_tep_find_top_stream(struct kshark_context *kshark_ctx,
-			   const char *file)
+int kshark_tep_find_top_stream(struct kshark_context *kshark_ctx,
+			       const char *file)
 {
 	struct kshark_data_stream *top_stream = NULL, *stream;
 	int i, *stream_ids = kshark_all_streams(kshark_ctx);
@@ -1654,5 +1645,8 @@ kshark_tep_find_top_stream(struct kshark_context *kshark_ctx,
 
 	free(stream_ids);
 
-	return top_stream;
+	if (!top_stream)
+		return -EEXIST;
+
+	return top_stream->stream_id;
 }

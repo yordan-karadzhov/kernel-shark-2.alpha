@@ -601,15 +601,22 @@ int kshark_import_trace_file(struct kshark_context *kshark_ctx,
 			if (strcmp(name, "top") == 0) {
 				sd = kshark_open(kshark_ctx, file);
 			} else {
-				struct kshark_data_stream *top_stream;
+				int sd_top;
 
-				top_stream =
-					kshark_tep_find_top_stream(kshark_ctx,
-								   file);
+				sd_top = kshark_tep_find_top_stream(kshark_ctx,
+								    file);
+				if (sd_top < 0) {
+					/* The "top" steam has to be initialized first. */
+					sd_top = kshark_open(kshark_ctx, file);
+				}
 
-				sd = kshark_tep_open_buffer(kshark_ctx,
-							    top_stream->stream_id,
-							    name);
+				if (sd_top >=0)
+					sd = kshark_tep_open_buffer(kshark_ctx,
+								    sd_top,
+								    name);
+
+				if (sd >= 0)
+				kshark_tep_handle_plugins(kshark_ctx, sd);
 			}
 		}
 

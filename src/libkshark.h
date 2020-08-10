@@ -72,7 +72,7 @@ struct kshark_entry {
  * Timestamp calibration function type. To be user for system clock
  * calibration.
  */
-typedef void (*time_calib_func) (struct kshark_entry *, int64_t *);
+typedef void (*time_calib_func) (int64_t *, int64_t *);
 
 struct kshark_data_stream;
 
@@ -500,6 +500,40 @@ static inline ssize_t kshark_load_entries(struct kshark_context *kshark_ctx,
 	return stream->interface.load_entries(stream, kshark_ctx, data_rows);
 }
 
+/**
+ * @brief Load the content of the trace data file asociated with a given
+ *	  Data stream identifie into a data matrix.
+ *
+ * @param kshark_ctx: Input location for context pointer.
+ * @param sd: Data stream identifier.
+ * @param data_rows: Output location for the trace data. The user is
+ *		     responsible for freeing the elements of the outputted
+ *		     array.
+ *
+ * @returns The size of the outputted data in the case of success, or a
+ *	    negative error code on failure.
+ */
+static inline ssize_t kshark_load_matrix(struct kshark_context *kshark_ctx,
+					 int sd,
+					 int16_t **cpu_array,
+					 int32_t **pid_array,
+					 int32_t **event_array,
+					 int64_t **offset_array,
+					 uint64_t **ts_array)
+{
+	struct kshark_data_stream *stream;
+
+	stream = kshark_get_data_stream(kshark_ctx, sd);
+	if (!stream)
+		return -EBADF;
+
+	return stream->interface.load_matrix(stream, kshark_ctx, cpu_array,
+								 pid_array,
+								 event_array,
+								 offset_array,
+								 ts_array);
+}
+
 /** Bit masks used to control the visibility of the entry after filtering. */
 enum kshark_filter_masks {
 	/**
@@ -737,16 +771,35 @@ kshark_get_entry_back(const struct kshark_entry_request *req,
 		      struct kshark_entry **data,
 		      ssize_t *index);
 
-void kshark_offset_calib(struct kshark_entry *e, int64_t *atgv);
+void kshark_offset_calib(int64_t *ts, int64_t *atgv);
 
-struct kshark_data_set {
+struct kshark_entry_data_set {
 	struct kshark_entry **data;
 
 	ssize_t n_rows;
 };
 
-struct kshark_entry **kshark_data_merge(struct kshark_data_set *buffer,
-					int n_buffers);
+struct kshark_entry **
+kshark_merge_data_entries(struct kshark_entry_data_set *buffers,
+			  int n_buffers);
+
+struct kshark_matrix_data_set {
+	int16_t *cpu_array;
+
+	int32_t *pid_array;
+
+	int32_t *event_array;
+
+	int64_t *offset_array;
+
+	uint64_t *ts_array;
+
+	ssize_t n_rows;
+};
+
+struct kshark_matrix_data_set
+kshark_merge_data_matrices(struct kshark_matrix_data_set *buffers,
+			   int n_buffers);
 
 void kshark_set_clock_offset(struct kshark_context *kshark_ctx,
 			     struct kshark_entry **entries, size_t size,
@@ -1098,9 +1151,7 @@ kshark_export_dstream(struct kshark_context *kshark_ctx, int sd,
 		      enum kshark_config_formats format);
 
 int kshark_import_dstream(struct kshark_context *kshark_ctx,
-			  struct kshark_config_doc *conf/*,
-			  struct kshark_entry ***data_rows,
-			  size_t *data_size*/);
+			  struct kshark_config_doc *conf);
 
 bool kshark_export_all_dstreams(struct kshark_context *kshark_ctx,
 				struct kshark_config_doc **conf);
@@ -1129,7 +1180,7 @@ struct kshark_config_doc *kshark_open_config_file(const char *file_name,
 
 struct kshark_config_doc *kshark_json_to_conf(struct json_object *jobj);
 
-bool data_matrix_alloc(size_t n_rows, int16_t **cpu_array,
+bool kshark_data_matrix_alloc(size_t n_rows, int16_t **cpu_array,
 				      int32_t **pid_array,
 				      int32_t **event_array,
 				      int64_t **offset_array,

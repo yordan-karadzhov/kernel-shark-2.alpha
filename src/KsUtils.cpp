@@ -476,13 +476,16 @@ int KsDataStore::_openDataFile(kshark_context *kshark_ctx,
 				const QString &file)
 {
 	int sd = kshark_open(kshark_ctx, file.toStdString().c_str());
-	if (sd < 0) {
+	if (sd != 0) {
 		qCritical() << "ERROR:" << sd << "while loading file " << file;
 		return sd;
 	}
 
-	if (kshark_ctx->stream[sd]->format == KS_TEP_DATA)
+	if (kshark_ctx->stream[sd]->format == KS_TEP_DATA) {
 		kshark_tep_init_all_buffers(kshark_ctx, sd);
+		for (int i = 0; i < kshark_ctx->n_streams; ++i)
+			kshark_tep_handle_plugins(kshark_ctx, i);
+	}
 
 	return sd;
 }

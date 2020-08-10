@@ -72,7 +72,8 @@ struct kshark_host_guest_map {
 	int *cpu_pid;
 };
 
-void kshark_tracecmd_free_hostguest_map(struct kshark_host_guest_map *map, int count);
+void kshark_tracecmd_free_hostguest_map(struct kshark_host_guest_map *map,
+					int count);
 
 int kshark_tracecmd_get_hostguest_mapping(struct kshark_host_guest_map **map);
 
@@ -84,9 +85,10 @@ int kshark_tep_open_buffer(struct kshark_context *kshark_ctx, int sd,
 
 int kshark_tep_init_all_buffers(struct kshark_context *kshark_ctx, int sd);
 
-struct kshark_data_stream *
-kshark_tep_find_top_stream(struct kshark_context *kshark_ctx,
-			   const char *file);
+int kshark_tep_handle_plugins(struct kshark_context *kshark_ctx, int sd);
+
+int kshark_tep_find_top_stream(struct kshark_context *kshark_ctx,
+			       const char *file);
 
 #ifdef __cplusplus
 }

@@ -210,10 +210,10 @@ void kshark_free_draw_handler_list(struct kshark_draw_handler *handlers)
 
 /**
  * @brief Allocate memory for a new plugin. Add this plugin to the list of
- *	  plugins used by the stream.
+ *	  plugins.
  *
  * @param kshark_ctx: Input location for the session context pointer.
- * @param name: The name of the plugin to unregister.
+ * @param name: The name of the plugin to register.
  * @param file: The plugin object file to load.
  *
  * @returns The plugin object on success, or NULL on failure.

@@ -832,7 +832,7 @@ void kshark_calib_entry(struct kshark_data_stream *stream,
 {
 	if (stream->calib && stream->calib_array) {
 		/* Calibrate the timestamp of the entry. */
-		stream->calib(entry, stream->calib_array);
+		stream->calib(&entry->ts, stream->calib_array);
 	}
 }
 
@@ -1189,12 +1189,12 @@ kshark_get_entry_back(const struct kshark_entry_request *req,
  * Add constant offset to the timestamp of the entry. To be used by the sream
  * object as a System clock calibration callback function.
  */
-void kshark_offset_calib(struct kshark_entry *e, int64_t *argv)
+void kshark_offset_calib(int64_t *ts, int64_t *argv)
 {
-	e->ts += argv[0];
+	*ts += argv[0];
 }
 
-static int first_in_time(struct kshark_data_set *buffer, int n_buffers, size_t *count)
+static int first_in_time_entry(struct kshark_entry_data_set *buffer, int n_buffers, size_t *count)
 {
 	int64_t t_min = INT64_MAX;
 	int i, min = -1;
@@ -1213,23 +1213,24 @@ static int first_in_time(struct kshark_data_set *buffer, int n_buffers, size_t *
 }
 
 /**
- * @brief Merge two trace data streams.
+ * @brief Merge trace data streams.
  *
  * @param buffers: Input location for the data-sets to be merged.
- * @param n_buffers: The size of the associated trace data.
+ * @param n_buffers: The number of the data-sets to be merged.
  *
- * @returns Merged and sorted in time trace data. The user is responsible for
- *	    freeing the elements of the outputted array.
+ * @returns Merged and sorted in time trace data entries. The user is
+ *	    responsible for freeing the elements of the outputted array.
  */
-struct kshark_entry **kshark_data_merge(struct kshark_data_set *buffers,
-					int n_buffers)
+struct kshark_entry **
+kshark_merge_data_entries(struct kshark_entry_data_set *buffers, int n_buffers)
 {
 	struct kshark_entry **merged_data;
 	size_t i, tot = 0, count[n_buffers];
 	int i_first;
 
 	if (n_buffers < 2) {
-		fputs("kshark_data_merge needs multipl data sets.\n", stderr);
+		fputs("kshark_merge_data_entries needs multipl data sets.\n",
+		      stderr);
 		return NULL;
 	}
 
@@ -1240,9 +1241,14 @@ struct kshark_entry **kshark_data_merge(struct kshark_data_set *buffers,
 	}
 
 	merged_data = calloc(tot, sizeof(*merged_data));
+	if (!merged_data) {
+		fputs("Failed to allocate memory for mergeing data entries.\n",
+		      stderr);
+		return NULL;
+	}
 
 	for (i = 0; i < tot; ++i) {
-		i_first = first_in_time(buffers, n_buffers, count);
+		i_first = first_in_time_entry(buffers, n_buffers, count);
 		assert(i_first >= 0);
 		merged_data[i] = buffers[i_first].data[count[i_first]];
 		++count[i_first];
@@ -1293,10 +1299,11 @@ void kshark_set_clock_offset(struct kshark_context *kshark_ctx,
 	if (!stream)
 		return;
 
-	if (!stream->calib_array) {
-		stream->calib_array = malloc(sizeof(*stream->calib_array));
-		stream->calib_array_size = 1;
-	}
+	if (stream->calib_array)
+		free(stream->calib_array);
+
+	stream->calib_array = malloc(sizeof(*stream->calib_array));
+	stream->calib_array_size = 1;
 
 	correction = offset - stream->calib_array[0];
 	stream->calib_array[0] = offset;
@@ -1324,7 +1331,7 @@ static ssize_t load_all_entries(struct kshark_context *kshark_ctx,
 	if (loaded_rows && n_loaded > 0)
 		++n_data_sets;
 
-	struct kshark_data_set buffers[n_data_sets];
+	struct kshark_entry_data_set buffers[n_data_sets];
 	memset(buffers, 0, sizeof(buffers));
 
 	if (loaded_rows && n_loaded > 0) {
@@ -1351,7 +1358,7 @@ static ssize_t load_all_entries(struct kshark_context *kshark_ctx,
 		*data_rows = buffers[0].data;
 	} else {
 		/* Merge all streams. */
-		*data_rows = kshark_data_merge(buffers, n_data_sets);
+		*data_rows = kshark_merge_data_entries(buffers, n_data_sets);
 	}
 
  error:
@@ -1406,7 +1413,7 @@ static inline void free_ptr(void *ptr)
 		free(*(void **)ptr);
 }
 
-bool data_matrix_alloc(size_t n_rows, int16_t **cpu_array,
+bool kshark_data_matrix_alloc(size_t n_rows, int16_t **cpu_array,
 				      int32_t **pid_array,
 				      int32_t **event_array,
 				      int64_t **offset_array,
@@ -1455,6 +1462,85 @@ bool data_matrix_alloc(size_t n_rows, int16_t **cpu_array,
 
 	fprintf(stderr, "Failed to allocate memory during data loading.\n");
 	return false;
+}
+
+static int first_in_time_row(struct kshark_matrix_data_set *buffers, int n_buffers, size_t *count)
+{
+	int64_t t_min = INT64_MAX;
+	int i, min = -1;
+
+	for (i = 0; i < n_buffers; ++i) {
+		if (count[i] == buffers[i].n_rows)
+			continue;
+
+		if (t_min > buffers[i].ts_array[count[i]]) {
+			t_min = buffers[i].ts_array[count[i]];
+			min = i;
+		}
+	}
+
+	return min;
+}
+
+/**
+ * @brief Merge trace data streams.
+ *
+ * @param buffers: Input location for the data-sets to be merged.
+ * @param n_buffers: The number of the data-sets to be merged.
+ *
+ * @returns Merged and sorted in time trace data matrix. The user is
+ *	    responsible for freeing the columns (arrays) of the outputted
+ *	    matrix.
+ */
+struct kshark_matrix_data_set
+kshark_merge_data_matrices(struct kshark_matrix_data_set *buffers, int n_buffers)
+{
+	struct kshark_matrix_data_set merged_data;
+	size_t i, tot = 0, count[n_buffers];
+	int i_first;
+	bool status;
+
+	merged_data.n_rows = -1;
+	if (n_buffers < 2) {
+		fputs("kshark_merge_data_entries needs multipl data sets.\n",
+		      stderr);
+		goto end;
+	}
+
+	for (i = 0; i < n_buffers; ++i) {
+		count[i] = 0;
+		if (buffers[i].n_rows > 0)
+			tot += buffers[i].n_rows;
+	}
+
+	status = kshark_data_matrix_alloc(tot, &merged_data.cpu_array,
+					       &merged_data.pid_array,
+					       &merged_data.event_array,
+					       &merged_data.offset_array,
+					       &merged_data.ts_array);
+	if (!status) {
+		fputs("Failed to allocate memory for mergeing data matrices.\n",
+		      stderr);
+		goto end;
+	}
+
+	merged_data.n_rows = tot;
+
+	for (i = 0; i < tot; ++i) {
+		i_first = first_in_time_row(buffers, n_buffers, count);
+		assert(i_first >= 0);
+
+		merged_data.cpu_array[i] = buffers[i_first].cpu_array[count[i_first]];
+		merged_data.pid_array[i] = buffers[i_first].pid_array[count[i_first]];
+		merged_data.event_array[i] = buffers[i_first].event_array[count[i_first]];
+		merged_data.offset_array[i] = buffers[i_first].offset_array[count[i_first]];
+		merged_data.ts_array[i] = buffers[i_first].ts_array[count[i_first]];
+
+		++count[i_first];
+	}
+
+ end:
+	return merged_data;
 }
 
 #define KS_CONTAINER_DEFAULT_SIZE	1024
