@@ -476,7 +476,7 @@ int KsDataStore::_openDataFile(kshark_context *kshark_ctx,
 				const QString &file)
 {
 	int sd = kshark_open(kshark_ctx, file.toStdString().c_str());
-	if (sd != 0) {
+	if (sd < 0) {
 		qCritical() << "ERROR:" << sd << "while loading file " << file;
 		return sd;
 	}
@@ -522,9 +522,13 @@ int  KsDataStore::loadDataFile(const QString &file,
 	kshark_close_all(kshark_ctx);
 
 	sd = _openDataFile(kshark_ctx, file);
-	if (sd < 0)
+	if (sd != 0)
 		return sd;
 
+	/*
+	 * The file may contain multiple buffers so we can have multiple
+	 * streams loaded.
+	 */
 	n_streams = kshark_ctx->n_streams;
 	for (sd = 0; sd < n_streams; ++sd)
 		_addPluginsToStream(kshark_ctx, sd, plugins);
