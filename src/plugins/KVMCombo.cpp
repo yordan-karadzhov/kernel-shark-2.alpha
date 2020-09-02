@@ -269,7 +269,7 @@ void KsComboPlotDialog::update()
 			continue;
 
 		streamName = KsUtils::streamDescription(kshark_ctx->stream[sd]);
-		_guestStreamComboBox.addItem(streamName);
+		_guestStreamComboBox.addItem(streamName, sd);
 		color << colTable[sd];
 		_guestStreamComboBox.setItemData(i, QBrush(color),
 						    Qt::BackgroundRole);
