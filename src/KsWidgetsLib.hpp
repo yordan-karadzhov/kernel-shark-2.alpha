@@ -163,11 +163,13 @@ bool fileExistsDialog(QString fileName);
  * The KsTimeOffsetDialog class provides a dialog used to enter the value of
  * the time offset between two Data streams.
  */
-class KsTimeOffsetDialog : public QWidget
+class KsTimeOffsetDialog : public QDialog
 {
 	Q_OBJECT
 public:
 	explicit KsTimeOffsetDialog(QWidget *parent = nullptr);
+
+	static double getValueNanoSec(QString label, bool *ok);
 
 signals:
 	/** Signal emitted when the "Apply" button is pressed. */
@@ -177,6 +179,9 @@ private:
 	QInputDialog	_input;
 
 	QComboBox	_streamCombo;
+
+private slots:
+	void _setDefault(int index);
 };
 
 /**

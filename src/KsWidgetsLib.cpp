@@ -189,37 +189,14 @@ bool fileExistsDialog(QString fileName)
 KsTimeOffsetDialog::KsTimeOffsetDialog(QWidget *parent)
 {
 	kshark_context *kshark_ctx(nullptr);
-	int  *streamIds;
+	int  *streamIds, sd;
+	QString streamName;
+	int64_t max_ofst;
 
 	auto lamApply = [&] (double val) {
-		int sd = _streamCombo.currentText().toInt();
+		int sd = _streamCombo.currentData().toInt();
 		emit apply(sd, val);
 		close();
-	};
-
-	auto lamSetDefault = [&] (const QString &val) {
-		kshark_context *kshark_ctx(nullptr);
-		struct kshark_data_stream *stream;
-		double offset;
-		int sd;
-
-		if (!kshark_instance(&kshark_ctx))
-			return;
-
-		sd = val.toInt();
-		stream = kshark_get_data_stream(kshark_ctx, sd);
-		if (!stream)
-			return;
-
-		if (!stream->calib_array) {
-			stream->calib = kshark_offset_calib;
-			stream->calib_array =
-				(int64_t *) calloc(1, sizeof(int64_t));
-			stream->calib_array_size = 1;
-		}
-
-		offset = stream->calib_array[0] * 1e-3;
-		_input.setDoubleValue(offset);
 	};
 
 	if (!kshark_instance(&kshark_ctx))
@@ -229,10 +206,13 @@ KsTimeOffsetDialog::KsTimeOffsetDialog(QWidget *parent)
 
 	streamIds = kshark_all_streams(kshark_ctx);
 	if (kshark_ctx->n_streams > 1) {
-		for (int i = 0; i < kshark_ctx->n_streams; ++i)
-			if (streamIds[i] != 0)
-				_streamCombo.addItem(QString::number(streamIds[i]));
-
+		for (int i = 0; i < kshark_ctx->n_streams; ++i) {
+			sd = streamIds[i];
+			if (sd != 0) {
+				streamName = KsUtils::streamDescription(kshark_ctx->stream[sd]);
+				_streamCombo.addItem(streamName);
+			}
+		}
 
 		layout()->addWidget(&_streamCombo);
 	}
@@ -240,10 +220,11 @@ KsTimeOffsetDialog::KsTimeOffsetDialog(QWidget *parent)
 	free(streamIds);
 
 	_input.setInputMode(QInputDialog::DoubleInput);
-	_input.setDoubleRange(-1e16, 1e16);
+	 max_ofst = (int64_t)1 << 60;
+	_input.setDoubleRange(-max_ofst, max_ofst);
 	_input.setDoubleDecimals(3);
 	_input.setLabelText("Offset [usec]:");
-	lamSetDefault(_streamCombo.currentText());
+	_setDefault(_streamCombo.currentIndex());
 
 	layout()->addWidget(&_input);
 
@@ -253,11 +234,56 @@ KsTimeOffsetDialog::KsTimeOffsetDialog(QWidget *parent)
 	connect(&_input,	&QDialog::rejected,
 		this,		&QWidget::close);
 
-
-	connect(&_streamCombo,	&QComboBox::currentTextChanged,
-		lamSetDefault);
+	connect(&_streamCombo,	SIGNAL(currentIndexChanged(int)),
+		SLOT(_setDefault(int)));
 
 	show();
+}
+
+void KsTimeOffsetDialog::_setDefault(int index) {
+	int sd = _streamCombo.currentData().toInt();
+	kshark_context *kshark_ctx(nullptr);
+	struct kshark_data_stream *stream;
+	double offset;
+
+	if (!kshark_instance(&kshark_ctx))
+		return;
+
+	stream = kshark_get_data_stream(kshark_ctx, sd);
+	if (!stream)
+		return;
+
+	if (!stream->calib_array) {
+		stream->calib = kshark_offset_calib;
+		stream->calib_array =
+			(int64_t *) calloc(1, sizeof(int64_t));
+		stream->calib_array_size = 1;
+	}
+
+	offset = stream->calib_array[0] * 1e-3;
+	_input.setDoubleValue(offset);
+}
+
+double KsTimeOffsetDialog::getValueNanoSec(QString label, bool *ok)
+{
+	KsTimeOffsetDialog dialog;
+	int64_t ofst(0);
+	int sd(-1);
+
+	*ok = false;
+
+	auto lamGetOffset = [&] (int stream_id, double ms) {
+		ofst = ms * 1000;
+		sd = stream_id;
+		*ok = true;
+	};
+
+	connect(&dialog, &KsTimeOffsetDialog::apply, lamGetOffset);
+	dialog._streamCombo.hide();
+	dialog._input.setLabelText(label + "\nOffset [usec]:");
+	dialog.exec();
+
+	return ofst;
 }
 
 /**

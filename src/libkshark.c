@@ -1293,19 +1293,20 @@ void kshark_set_clock_offset(struct kshark_context *kshark_ctx,
 			     int sd, int64_t offset)
 {
 	struct kshark_data_stream *stream;
-	uint64_t correction;
+	int64_t correction;
 
 	stream = kshark_get_data_stream(kshark_ctx, sd);
 	if (!stream)
 		return;
 
-	if (stream->calib_array)
-		free(stream->calib_array);
-
-	stream->calib_array = malloc(sizeof(*stream->calib_array));
-	stream->calib_array_size = 1;
+	if (!stream->calib_array) {
+		stream->calib = kshark_offset_calib;
+		stream->calib_array = calloc(1, sizeof(*stream->calib_array));
+		stream->calib_array_size = 1;
+	}
 
 	correction = offset - stream->calib_array[0];
+	printf("@ kshark_set_clock_offset  %i  %li (%li, %li)\n", sd, offset, correction, stream->calib_array[0]);
 	stream->calib_array[0] = offset;
 
 	for (size_t i = 0; i < size; ++i)

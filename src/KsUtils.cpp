@@ -435,7 +435,8 @@ QString taskPlotName(int sd, int pid)
 QString streamDescription(kshark_data_stream *stream)
 {
 	QString descr(stream->file);
-	if (stream->name) {
+	QString buffName(stream->name);
+	if (!buffName.isEmpty() && buffName != "top") {
 		descr += ":";
 		descr += stream->name;
 	}
@@ -568,8 +569,9 @@ int KsDataStore::appendDataFile(const QString &file, int64_t offset)
 
 	for (i = sd; i < kshark_ctx->n_streams; ++i) {
 		kshark_ctx->stream[sd]->calib = kshark_offset_calib;
-		kshark_ctx->stream[sd]->calib_array = (int64_t *) malloc(sizeof(int64_t));
-		*(kshark_ctx->stream[sd]->calib_array) = offset;
+		kshark_ctx->stream[sd]->calib_array =
+			(int64_t *) calloc(1, sizeof(int64_t));
+		kshark_ctx->stream[sd]->calib_array[0] = offset;
 		kshark_ctx->stream[sd]->calib_array_size = 1;
 	}
 
